@@ -28,7 +28,7 @@ function AsciiVideo() {
         if (!hiddenCtx || !visibleCtx) return;
         
         let animFrameId: number;
-        const CHARS = ' .,:;i1tfLCG08@';
+        const CHARS = ' .\'`,-_":;^=+*!?/\\|()[]{}tfilcjrzxvuneoaswhkqdpbgmyXY0123456789JCZULMWOQDBHNEFK#@';
         let charW: number;
         let charH: number;
 
@@ -82,10 +82,15 @@ function AsciiVideo() {
             hiddenCanvas.width = Math.floor(video.videoWidth * scale / charAspect); // compensate for character aspect ratio
             hiddenCanvas.height = Math.floor(video.videoHeight * scale);
 
-            canvas.width = hiddenCanvas.width * charW;
-            canvas.height = hiddenCanvas.height * charH;
+            const dpr = window.devicePixelRatio || 1; // dpr -> make css pixels match browser pixels (no resolution stretching)
+
+            canvas.width = hiddenCanvas.width * charW * dpr;
+            canvas.height = hiddenCanvas.height * charH * dpr;
+            canvas.style.width = `${hiddenCanvas.width * charW}px`;
+            canvas.style.height = `${hiddenCanvas.height * charH}px`;
 
             // re-apply after resize (it gets reset)
+            visibleCtx.scale(dpr, dpr);
             visibleCtx.font = `${FONT_SIZE}px monospace`;
             visibleCtx.textBaseline = "top";
 
