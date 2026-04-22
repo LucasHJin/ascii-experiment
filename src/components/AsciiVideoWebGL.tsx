@@ -15,22 +15,32 @@ void main() {
 }
 `;
 
-function createShader(gl: WebGLRenderingContext, type: number, src: string): WebGLShader {
+function createShader(gl: WebGLRenderingContext, type: number, src: string): WebGLShader | null {
     const shader = gl.createShader(type);
     if (!shader) {
         throw new Error("Failed to create shader");
     }
     gl.shaderSource(shader, src);
     gl.compileShader(shader);
-    return shader;
+    const success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+    if (success) return shader;
+
+    console.log(gl.getShaderInfoLog(shader));
+    gl.deleteShader(shader);
+    return null;
 }
 
-function createProgram(gl: WebGLRenderingContext, vert: WebGLShader, frag: WebGLShader): WebGLProgram {
+function createProgram(gl: WebGLRenderingContext, vert: WebGLShader, frag: WebGLShader): WebGLProgram | null {
     const program = gl.createProgram()!;
     gl.attachShader(program, vert);
     gl.attachShader(program, frag);
     gl.linkProgram(program);
-    return program;
+    const success = gl.getProgramParameter(program, gl.LINK_STATUS);
+    if (success) return program;
+    
+    console.log(gl.getProgramInfoLog(program));
+    gl.deleteProgram(program);
+    return null;
 }
 
 function AsciiVideoWebGL() {
@@ -51,9 +61,9 @@ function AsciiVideoWebGL() {
         if (!program) return;
         
         const positions = new Float32Array([
-            0.0,  0.5,
-            -0.5, -0.5,
-            0.5, -0.5,
+            1.0, 1.0,
+            0.0, 0.0,
+            1.0, -1.0,
         ]);
         const buffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
