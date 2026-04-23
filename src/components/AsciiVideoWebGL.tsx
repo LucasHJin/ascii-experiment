@@ -2,20 +2,18 @@ import { useRef, useEffect } from "react";
 
 const vertSrc = `
 attribute vec2 a_position;
-attribute vec3 a_color;
-varying vec3 v_color;
 
 void main() {
     gl_Position = vec4(a_position, 0.0, 1.0);
-    v_color = a_color;
 }
 `;
 const fragSrc = `
 precision mediump float;
-varying vec3 v_color;
+uniform vec2 u_resolution;
 
 void main() {
-    gl_FragColor = vec4(v_color, 1.0);
+    vec2 uv = gl_FragCoord.xy / u_resolution; // normalized coordinate for 2D space
+    gl_FragColor = vec4(step(0.5, uv.x), step(0.5, uv.y), 0.0, 1.0);
 }
 `;
 
@@ -66,24 +64,27 @@ function AsciiVideoWebGL() {
         if (!program) return;
         
         const data = new Float32Array([
-            1.0, 1.0, 0.0, 0.0, 0.6,
-            0.0, 0.0, 1.0, 0.2, 1.0,
-            1.0, -1.0, 0.3, 0.5, 0.7,
+            1.0, 1.0,
+            -1.0, 1.0,
+            1.0, -1.0,
+            -1.0, -1.0,
+            -1.0, 1.0,
+            1.0, -1.0,
         ]);
         const buffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
 
         const posLoc = gl.getAttribLocation(program, "a_position");
-        const colLoc = gl.getAttribLocation(program, "a_color"); // a_color -> input per vertex, v_color -> passed from vshader to fshader
+        const resLoc = gl.getUniformLocation(program, "u_resolution");
 
-        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 20, 0); // both VAP correspond to the same vertex -> 4 bytes per vertex
-        gl.vertexAttribPointer(colLoc, 3, gl.FLOAT, false, 20, 8);
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0); 
         gl.enableVertexAttribArray(posLoc);
-        gl.enableVertexAttribArray(colLoc);
 
         gl.useProgram(program);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.uniform2f(resLoc, canvas.width, canvas.height);
+
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
     }, [])
 
     return (
