@@ -2,16 +2,20 @@ import { useRef, useEffect } from "react";
 
 const vertSrc = `
 attribute vec2 a_position;
+attribute vec3 a_color;
+varying vec3 v_color;
 
 void main() {
     gl_Position = vec4(a_position, 0.0, 1.0);
+    v_color = a_color;
 }
 `;
 const fragSrc = `
 precision mediump float;
+varying vec3 v_color;
 
 void main() {
-    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+    gl_FragColor = vec4(v_color, 1.0);
 }
 `;
 
@@ -56,22 +60,27 @@ function AsciiVideoWebGL() {
         if (!gl) return;
         const vertShader = createShader(gl, gl.VERTEX_SHADER, vertSrc);
         const fragShader = createShader(gl, gl.FRAGMENT_SHADER, fragSrc);
+        if (!vertShader || !fragShader) return;
 
         const program = createProgram(gl, vertShader, fragShader);
         if (!program) return;
         
-        const positions = new Float32Array([
-            1.0, 1.0,
-            0.0, 0.0,
-            1.0, -1.0,
+        const data = new Float32Array([
+            1.0, 1.0, 0.0, 0.0, 0.6,
+            0.0, 0.0, 1.0, 0.2, 1.0,
+            1.0, -1.0, 0.3, 0.5, 0.7,
         ]);
         const buffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
 
-        const loc = gl.getAttribLocation(program, "a_position");
-        gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(loc);
+        const posLoc = gl.getAttribLocation(program, "a_position");
+        const colLoc = gl.getAttribLocation(program, "a_color"); // a_color -> input per vertex, v_color -> passed from vshader to fshader
+
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 20, 0); // both VAP correspond to the same vertex -> 4 bytes per vertex
+        gl.vertexAttribPointer(colLoc, 3, gl.FLOAT, false, 20, 8);
+        gl.enableVertexAttribArray(posLoc);
+        gl.enableVertexAttribArray(colLoc);
 
         gl.useProgram(program);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
