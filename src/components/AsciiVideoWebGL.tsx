@@ -2,7 +2,6 @@ import { useRef, useEffect } from "react";
 
 const vertSrc = `
 attribute vec2 a_position;
-varying vec2 v_texCoord;
 
 void main() {
     gl_Position = vec4(a_position, 0.0, 1.0);
@@ -16,7 +15,6 @@ uniform sampler2D u_atlas;
 uniform vec2 u_resolution;
 uniform vec2 u_cellsize;
 uniform float u_numChars;
-varying vec2 v_texCoord;
 
 void main() {
     vec2 fragCoord = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y); // flip y coords
@@ -25,11 +23,10 @@ void main() {
     vec2 uv = cellCenter / u_resolution; // normalize to 0-1
 
     vec3 cellColor = texture2D(u_texture, uv).rgb;
-    float grey = dot(cellColor, vec3(0.299, 0.587, 0.114)); // luminance of pixel
-    cellColor = mix(vec3(grey), cellColor, 1.8); // increase saturation
+    float luminosity = dot(cellColor, vec3(0.299, 0.587, 0.114)); // luminance of pixel
+    cellColor = clamp(mix(vec3(luminosity), cellColor, 1.8), 0.0, 1.0); // increase saturation (clamped)
     cellColor = pow(cellColor, vec3(0.6)); // boost brightness 
 
-    float luminosity = 0.299 * cellColor.r + 0.587 * cellColor.g + 0.114 * cellColor.b;
     float charInd = floor(luminosity * (u_numChars - 1.0));
     vec2 withinCellPos = fract(fragCoord / u_cellsize); // need this to determine how a single pixel of atlas maps over (within a character)
     float atlasU = (charInd + withinCellPos.x) / u_numChars;
@@ -89,6 +86,8 @@ function AsciiVideoWebGL() {
 
         const gl = canvas.getContext("webgl");
         if (!gl) return;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+
         const vertShader = createShader(gl, gl.VERTEX_SHADER, vertSrc);
         const fragShader = createShader(gl, gl.FRAGMENT_SHADER, fragSrc);
         if (!vertShader || !fragShader) return;
@@ -134,7 +133,7 @@ function AsciiVideoWebGL() {
 
         const loop = () => {
             gl.activeTexture(gl.TEXTURE0);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, video);
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             animFrameId = requestAnimationFrame(loop);
         }
@@ -180,6 +179,11 @@ function AsciiVideoWebGL() {
             gl.uniform1i(atlasLoc, 1);
             const numLoc = gl.getUniformLocation(program, "u_numChars")
             gl.uniform1f(numLoc, CHARS.length);
+
+            // need to allocate memory for video once
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video); 
 
             video.play();
             animFrameId = requestAnimationFrame(loop);
