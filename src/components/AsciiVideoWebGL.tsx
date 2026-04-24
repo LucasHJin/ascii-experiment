@@ -25,6 +25,10 @@ void main() {
     vec2 uv = cellCenter / u_resolution; // normalize to 0-1
 
     vec3 cellColor = texture2D(u_texture, uv).rgb;
+    float grey = dot(cellColor, vec3(0.299, 0.587, 0.114)); // luminance of pixel
+    cellColor = mix(vec3(grey), cellColor, 1.8); // increase saturation
+    cellColor = pow(cellColor, vec3(0.7)); // boost brightness 
+
     float luminosity = 0.299 * cellColor.r + 0.587 * cellColor.g + 0.114 * cellColor.b;
     float charInd = floor(luminosity * (u_numChars - 1.0));
     vec2 withinCellPos = fract(fragCoord / u_cellsize); // need this to determine how a single pixel of atlas maps over (within a character)
