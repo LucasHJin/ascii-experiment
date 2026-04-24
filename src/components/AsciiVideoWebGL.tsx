@@ -32,7 +32,12 @@ void main() {
     float atlasV = withinCellPos.y;
     float glyphMask = texture2D(u_atlas, vec2(atlasU, atlasV)).r; // only need r to tell if there is white or black
 
-    gl_FragColor = vec4(cellColor * glyphMask, 1.0);
+    float bgAlpha = 0.3;
+    vec3 bgColor = cellColor * bgAlpha;
+    vec3 fgColor = cellColor;
+    vec3 finalColor = mix(bgColor, fgColor, glyphMask);
+
+    gl_FragColor = vec4(finalColor, 1.0);
 }
 `;
 
@@ -186,7 +191,7 @@ function AsciiVideoWebGL() {
             <video ref={videoRef} muted playsInline autoPlay loop style={{ display: "none" }}>
                 <source src="/test.mp4" type="video/mp4" />
             </video>
-            <canvas ref={canvasRef} style={{ width: '100vw', height: '100vh', display: 'block', background: 'black' }} />
+            <canvas ref={canvasRef} style={{ width: '100vw', height: '100vh', display: 'block'}} />
         </div>
     );
 }
