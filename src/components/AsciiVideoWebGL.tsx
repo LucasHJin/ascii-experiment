@@ -27,7 +27,7 @@ void main() {
     vec3 cellColor = texture2D(u_texture, uv).rgb;
     float grey = dot(cellColor, vec3(0.299, 0.587, 0.114)); // luminance of pixel
     cellColor = mix(vec3(grey), cellColor, 1.8); // increase saturation
-    cellColor = pow(cellColor, vec3(0.7)); // boost brightness 
+    cellColor = pow(cellColor, vec3(0.6)); // boost brightness 
 
     float luminosity = 0.299 * cellColor.r + 0.587 * cellColor.g + 0.114 * cellColor.b;
     float charInd = floor(luminosity * (u_numChars - 1.0));
@@ -116,9 +116,7 @@ function AsciiVideoWebGL() {
         gl.useProgram(program);
 
         const resLoc = gl.getUniformLocation(program, "u_resolution");
-        const sizeLoc = gl.getUniformLocation(program, "u_cellsize");
         gl.uniform2f(resLoc, canvas.width, canvas.height);
-        gl.uniform2f(sizeLoc, 8.0, 14.0);
 
         // create empty slot in gpu
         const texture = gl.createTexture();
@@ -142,22 +140,28 @@ function AsciiVideoWebGL() {
         }
 
         const onLoaded = () => {
-            const charW = 8;
-            const charH = 14;
-
             // write character ramp onto a hidden canvas (and then turn it into a texture to sample from)
             const CHARS = ' .\'`,-_":;^=+*!?/\\|()[]{}tfilcjrzxvuneoaswhkqdpbgmyXY0123456789JCZULMWOQDBHNEFK#@';
             const hiddenCanvas = hiddenCanvasRef.current;
             if (!hiddenCanvas) return;
+            const hiddenCtx = hiddenCanvas.getContext("2d");
+            if (!hiddenCtx) return;
+
+            const fontSize = 10;
+            hiddenCtx.font = `${fontSize}px monospace`;
+            const charW = Math.ceil(hiddenCtx.measureText('M').width);
+            const charH = fontSize;
             hiddenCanvas.width = CHARS.length * charW; // need to set width and height
             hiddenCanvas.height = charH;
 
-            const hiddenCtx = hiddenCanvas.getContext("2d");
-            if (!hiddenCtx) return;
+            // set cell size after dynamic measurement
+            const sizeLoc = gl.getUniformLocation(program, "u_cellsize");
+            gl.uniform2f(sizeLoc, charW, charH);
+
+            hiddenCtx.font = `${charH}px monospace`;
             hiddenCtx.fillStyle = 'black';
             hiddenCtx.fillRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
             hiddenCtx.fillStyle = 'white';
-            hiddenCtx.font = `${charH}px monospace`;
             hiddenCtx.textBaseline = 'top';
 
             for (let c = 0; c < CHARS.length; c += 1) {
