@@ -12,8 +12,10 @@ const fragSrc = `
 precision mediump float;
 
 uniform sampler2D u_texture;
+uniform sampler2D u_atlas;
 uniform vec2 u_resolution;
 uniform vec2 u_cellsize;
+uniform float u_numChars;
 varying vec2 v_texCoord;
 
 void main() {
@@ -22,7 +24,15 @@ void main() {
     vec2 cellCenter = (cellCoord + 0.5) * u_cellsize; // figure out center pixel of cell
     vec2 uv = cellCenter / u_resolution; // normalize to 0-1
 
-    gl_FragColor = texture2D(u_texture, uv);
+    vec3 cellColor = texture2D(u_texture, uv).rgb;
+    float luminosity = 0.299 * cellColor.r + 0.587 * cellColor.g + 0.114 * cellColor.b;
+    float charInd = floor(luminosity * (u_numChars - 1.0));
+    vec2 withinCellPos = fract(fragCoord / u_cellsize); // need this to determine how a single pixel of atlas maps over (within a character)
+    float atlasU = (charInd + withinCellPos.x) / u_numChars;
+    float atlasV = withinCellPos.y;
+    float glyphMask = texture2D(u_atlas, vec2(atlasU, atlasV)).r; // only need r to tell if there is white or black
+
+    gl_FragColor = vec4(cellColor * glyphMask, 1.0);
 }
 `;
 
@@ -57,6 +67,7 @@ function createProgram(gl: WebGLRenderingContext, vert: WebGLShader, frag: WebGL
 function AsciiVideoWebGL() {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
+    const hiddenCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
     useEffect(() => {
         const canvas = canvasRef.current
@@ -78,19 +89,19 @@ function AsciiVideoWebGL() {
         
         // x, y, u, v
         const data = new Float32Array([
-            1.0,  1.0,  1.0, 1.0,
-            -1.0,  1.0,  0.0, 1.0,
-            1.0, -1.0,  1.0, 0.0,
-            -1.0, -1.0,  0.0, 0.0,
-            -1.0,  1.0,  0.0, 1.0,
-            1.0, -1.0,  1.0, 0.0,
+            1.0, 1.0,
+            -1.0, 1.0,
+            1.0, -1.0,
+            -1.0, -1.0,
+            -1.0, 1.0,
+            1.0, -1.0,
         ]);
         const buffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
 
         const posLoc = gl.getAttribLocation(program, "a_position");
-        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 16, 0); 
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0); 
         gl.enableVertexAttribArray(posLoc);
 
         gl.useProgram(program);
@@ -98,7 +109,7 @@ function AsciiVideoWebGL() {
         const resLoc = gl.getUniformLocation(program, "u_resolution");
         const sizeLoc = gl.getUniformLocation(program, "u_cellsize");
         gl.uniform2f(resLoc, canvas.width, canvas.height);
-        gl.uniform2f(sizeLoc, 8.0, 8.0);
+        gl.uniform2f(sizeLoc, 8.0, 14.0);
 
         // create empty slot in gpu
         const texture = gl.createTexture();
@@ -115,12 +126,48 @@ function AsciiVideoWebGL() {
         let animFrameId: number;
 
         const loop = () => {
+            gl.activeTexture(gl.TEXTURE0);
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             animFrameId = requestAnimationFrame(loop);
         }
 
         const onLoaded = () => {
+            const charW = 8;
+            const charH = 14;
+
+            // write character ramp onto a hidden canvas (and then turn it into a texture to sample from)
+            const CHARS = ' .\'`,-_":;^=+*!?/\\|()[]{}tfilcjrzxvuneoaswhkqdpbgmyXY0123456789JCZULMWOQDBHNEFK#@';
+            const hiddenCanvas = hiddenCanvasRef.current;
+            if (!hiddenCanvas) return;
+            hiddenCanvas.width = CHARS.length * charW; // need to set width and height
+            hiddenCanvas.height = charH;
+
+            const hiddenCtx = hiddenCanvas.getContext("2d");
+            if (!hiddenCtx) return;
+            hiddenCtx.fillStyle = 'black';
+            hiddenCtx.fillRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+            hiddenCtx.fillStyle = 'white';
+            hiddenCtx.font = `${charH}px monospace`;
+            hiddenCtx.textBaseline = 'top';
+
+            for (let c = 0; c < CHARS.length; c += 1) {
+                hiddenCtx.fillText(CHARS[c], c * charW, 0);
+            }
+
+            const atlasTexture = gl.createTexture();
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, atlasTexture);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hiddenCanvas);
+            const atlasLoc = gl.getUniformLocation(program, "u_atlas");
+            gl.uniform1i(atlasLoc, 1);
+            const numLoc = gl.getUniformLocation(program, "u_numChars")
+            gl.uniform1f(numLoc, CHARS.length);
+
             video.play();
             animFrameId = requestAnimationFrame(loop);
         };
@@ -135,6 +182,7 @@ function AsciiVideoWebGL() {
 
     return (
         <div>
+            <canvas ref={hiddenCanvasRef} style={{ display: "none" }} />
             <video ref={videoRef} muted playsInline autoPlay loop style={{ display: "none" }}>
                 <source src="/test.mp4" type="video/mp4" />
             </video>
