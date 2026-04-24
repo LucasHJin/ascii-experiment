@@ -150,12 +150,15 @@ function AsciiVideoWebGL() {
             const hiddenCtx = hiddenCanvas.getContext("2d");
             if (!hiddenCtx) return;
 
-            const fontSize = 10;
+            const dpr = window.devicePixelRatio || 1; // dpr -> how many real pixels used for 1 css pixel
+            const fontSize = 15;
             hiddenCtx.font = `${fontSize}px monospace`;
             const charW = Math.ceil(hiddenCtx.measureText('M').width);
             const charH = fontSize;
-            hiddenCanvas.width = CHARS.length * charW; // need to set width and height
-            hiddenCanvas.height = charH;
+
+            hiddenCanvas.width = CHARS.length * charW * dpr; // need to set width and height
+            hiddenCanvas.height = charH * dpr;
+            hiddenCtx.scale(dpr, dpr); // normalize coordinate system to still use css pixels
 
             // set cell size after dynamic measurement
             const sizeLoc = gl.getUniformLocation(program, "u_cellsize");
@@ -163,7 +166,7 @@ function AsciiVideoWebGL() {
 
             hiddenCtx.font = `${charH}px monospace`;
             hiddenCtx.fillStyle = 'black';
-            hiddenCtx.fillRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+            hiddenCtx.fillRect(0, 0, CHARS.length * charW, charH);
             hiddenCtx.fillStyle = 'white';
             hiddenCtx.textBaseline = 'top';
 
