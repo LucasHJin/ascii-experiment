@@ -130,10 +130,14 @@ function AsciiVideoWebGL() {
         gl.uniform1i(texLoc, 0); // bind u_texture to slot 0
 
         let animFrameId: number;
+        let lastTime = -1;
 
         const loop = () => {
-            gl.activeTexture(gl.TEXTURE0);
-            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, video);
+            if (video.currentTime != lastTime) {
+                lastTime = video.currentTime;
+                gl.activeTexture(gl.TEXTURE0);
+                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, video);
+            }
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             animFrameId = requestAnimationFrame(loop);
         }
