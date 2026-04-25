@@ -38,7 +38,12 @@ void main() {
     vec3 fgColor = cellColor;
     vec3 finalColor = mix(bgColor, fgColor, glyphMask);
 
-    gl_FragColor = vec4(finalColor, 1.0);
+    // vignette effect (based on distance to center)
+    vec2 pixel_uv = (fragCoord / u_resolution) - 0.5;
+    float vignette = clamp(1.0 - pow(dot(pixel_uv, pixel_uv) * 2.5, 2.0), 0.0, 1.0);
+    vignette = clamp(vignette, 0.0, 1.0);
+
+    gl_FragColor = vec4(finalColor * vignette, 1.0);
 }
 `;
 
