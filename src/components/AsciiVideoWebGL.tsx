@@ -74,6 +74,7 @@ function AsciiVideoWebGL() {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const hiddenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const atlasTextureRef = useRef<WebGLTexture | null>(null);
 
     useEffect(() => {
         const canvas = canvasRef.current
@@ -178,6 +179,7 @@ function AsciiVideoWebGL() {
             }
 
             const atlasTexture = gl.createTexture();
+            atlasTextureRef.current = atlasTexture;
             gl.activeTexture(gl.TEXTURE1);
             gl.bindTexture(gl.TEXTURE_2D, atlasTexture);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -204,12 +206,20 @@ function AsciiVideoWebGL() {
         return () => {
             cancelAnimationFrame(animFrameId);
             video.removeEventListener("loadeddata", onLoaded);
+
+            // gl cleanup (nice to have -> video should loop forever)
+            gl.deleteTexture(texture);
+            gl.deleteBuffer(buffer);
+            gl.deleteShader(vertShader);
+            gl.deleteShader(fragShader);
+            gl.deleteProgram(program);
+            gl.deleteTexture(atlasTextureRef.current);
         }
     }, [])
 
     return (
         <div
-            style={{ width: '100vw', height: '100vh', background: 'black', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
+            style={{ width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
         >
             <canvas ref={hiddenCanvasRef} style={{ display: "none" }} />
             <video ref={videoRef} muted playsInline autoPlay loop style={{ display: "none" }}>
