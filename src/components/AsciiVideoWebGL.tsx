@@ -78,15 +78,12 @@ function AsciiVideoWebGL() {
     useEffect(() => {
         const canvas = canvasRef.current
         if (!canvas) return;
-        canvas.width = canvas.clientWidth;
-        canvas.height = canvas.clientHeight;
 
         const video = videoRef.current;
         if (!video) return;
 
         const gl = canvas.getContext("webgl");
         if (!gl) return;
-        gl.viewport(0, 0, canvas.width, canvas.height);
 
         const vertShader = createShader(gl, gl.VERTEX_SHADER, vertSrc);
         const fragShader = createShader(gl, gl.FRAGMENT_SHADER, fragSrc);
@@ -114,9 +111,6 @@ function AsciiVideoWebGL() {
 
         gl.useProgram(program);
 
-        const resLoc = gl.getUniformLocation(program, "u_resolution");
-        gl.uniform2f(resLoc, canvas.width, canvas.height);
-
         // create empty slot in gpu
         const texture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE0);
@@ -143,6 +137,15 @@ function AsciiVideoWebGL() {
         }
 
         const onLoaded = () => {
+            // set canvas dimensions based on video (no stretching/compression)
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+
+            // set resolution with video ratio as well
+            const resLoc = gl.getUniformLocation(program, "u_resolution");
+            gl.uniform2f(resLoc, canvas.width, canvas.height);
+
             // write character ramp onto a hidden canvas (and then turn it into a texture to sample from)
             const CHARS = ' .\'`,-_":;^=+*!?/\\|()[]{}tfilcjrzxvuneoaswhkqdpbgmyXY0123456789JCZULMWOQDBHNEFK#@';
             const hiddenCanvas = hiddenCanvasRef.current;
@@ -205,12 +208,14 @@ function AsciiVideoWebGL() {
     }, [])
 
     return (
-        <div>
+        <div
+            style={{ width: '100vw', height: '100vh', background: 'black', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
+        >
             <canvas ref={hiddenCanvasRef} style={{ display: "none" }} />
             <video ref={videoRef} muted playsInline autoPlay loop style={{ display: "none" }}>
-                <source src="/test.mp4" type="video/mp4" />
+                <source src="/test2.mp4" type="video/mp4" />
             </video>
-            <canvas ref={canvasRef} style={{ width: '100vw', height: '100vh', display: 'block'}} />
+            <canvas ref={canvasRef} style={{ width: '100vw', height: 'auto', display: 'block'}} />
         </div>
     );
 }
