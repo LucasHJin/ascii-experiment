@@ -245,6 +245,21 @@ function AsciiVideoWebGL() {
                             samplingVector.push(0.299 * r + 0.587 * g + 0.114 * b);
                         }
 
+                        // contrast enhancement -> normalize, apply exponent, denormalize (preserve lighter values)
+                        let maxVal = 0;
+                        for (let d = 0; d < 6; d++) {
+                            if (samplingVector[d] > maxVal) {
+                                maxVal = samplingVector[d];
+                            }
+                        }
+                        if (maxVal > 0) {
+                            const EXPONENT = 2;
+                            for (let d = 0; d < 6; d++) {
+                                const norm = samplingVector[d] / maxVal;
+                                samplingVector[d] = Math.pow(norm, EXPONENT) * maxVal;
+                            }
+                        }
+
                         // create cache key
                         const RANGE = 6;
                         let key = 0;
@@ -312,7 +327,7 @@ function AsciiVideoWebGL() {
             const hiddenCanvas = document.createElement('canvas');
             const hiddenCtx = hiddenCanvas.getContext('2d')!;
 
-            const fontSize = 10;
+            const fontSize = 15;
             hiddenCtx.font = `${fontSize}px monospace`;
             const charW = Math.ceil(hiddenCtx.measureText('M').width);
             const charH = fontSize;
@@ -403,7 +418,7 @@ function AsciiVideoWebGL() {
             style={{ width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
         >
             <video ref={videoRef} muted playsInline autoPlay loop style={{ display: "none" }}>
-                <source src="/test.mp4" type="video/mp4" />
+                <source src="/test2.mp4" type="video/mp4" />
             </video>
             <canvas ref={canvasRef} style={{ width: '100vw', height: 'auto', display: 'block'}} />
         </div>
