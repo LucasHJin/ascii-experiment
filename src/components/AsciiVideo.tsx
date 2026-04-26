@@ -109,15 +109,15 @@ function AsciiVideo() {
     return (
         <div 
             ref={containerRef}
-            style={{ width: '100vw', height: '100vh', background: 'black', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
+            style={{ width: '100%', height: '100%', background: 'black', overflow: 'hidden'}}
         >
             <canvas ref={hiddenCanvasRef} style={{ display: "none" }} />
 
-            <video ref={videoRef} muted playsInline autoPlay style={{ display: "none" }}>
+            <video ref={videoRef} muted playsInline autoPlay loop style={{ display: "none" }}>
                 <source src="/test.mp4" type="video/mp4" />
             </video>
 
-            <canvas ref={canvasRef} style={{ display: 'block' }} />
+            <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: 'auto' }} />
 
             {/*
             <pre ref={preRef} style={{ 

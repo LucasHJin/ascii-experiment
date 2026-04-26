@@ -415,12 +415,12 @@ function AsciiVideoWebGL() {
 
     return (
         <div
-            style={{ width: '100vw', height: '100vh', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
+            style={{ width: '100%', height: 'auto', overflow: 'hidden'}}
         >
             <video ref={videoRef} muted playsInline autoPlay loop style={{ display: "none" }}>
-                <source src="/test2.mp4" type="video/mp4" />
+                <source src="/test.mp4" type="video/mp4" />
             </video>
-            <canvas ref={canvasRef} style={{ width: '100vw', height: 'auto', display: 'block'}} />
+            <canvas ref={canvasRef} style={{ width: '100%', height: 'auto', display: 'block'}} />
         </div>
     );
 }

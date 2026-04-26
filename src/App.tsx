@@ -1,16 +1,14 @@
-import './App.css'
-import './components/AsciiVideo'
-import AsciiVideo from './components/AsciiVideo'
-import AsciiVideoWebGLNoEdges from './components/AsciiVideoWebGLNoEdges'
-import AsciiVideoWebGL from './components/AsciiVideoWebGL'
+import { Routes, Route } from "react-router-dom";
+import Home from "./pages/Home";
+import Testing from "./pages/Testing";
 
 function App() {
   return (
-    <div>
-      {/* <AsciiVideo /> */}
-      <AsciiVideoWebGL />
-    </div>
-  )
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/testing" element={<Testing />} />
+    </Routes>
+  );
 }
 
-export default App
+export default App;
