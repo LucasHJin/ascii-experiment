@@ -194,7 +194,7 @@ function AsciiVideoWebGL({ coloredBg = true, initialEffect = 0 }: Props) {
             gl.uniform2f(resLoc, canvas.width, canvas.height);
 
             // write character ramp onto a hidden canvas (and then turn it into a texture to sample from)
-            const CHARS = ' .\'`,-_":;^=+*!?/\\|()[]{}tfilcjrzxvuneoaswhkqdpbgmyXY0123456789JCZULMWOQDBHNEFK#@';
+            const CHARS = " .'`^\",:;~-_+=*!?/\\|()[]{}<>iIl1tTfLjJrRsSzZcCvVnNmMwWxXyY0OoQq9&%#@$";
             const hiddenCanvas = document.createElement('canvas');
             const hiddenCtx = hiddenCanvas.getContext('2d')!;
 
