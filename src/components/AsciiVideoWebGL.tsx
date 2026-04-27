@@ -20,7 +20,7 @@ function AsciiVideoWebGL() {
         const SAMPLE_HEIGHT = 3;
         const SAMPLE_WIDTH = 2;
 
-        const canvas = canvasRef.current
+        const canvas = canvasRef.current;
         if (!canvas) return;
 
         const video = videoRef.current;
@@ -263,13 +263,11 @@ function AsciiVideoWebGL() {
     }, [])
 
     return (
-        <div
-            style={{ width: '100%', height: 'auto', overflow: 'hidden'}}
-        >
+        <div style={{ width: '100%', height: 'auto', overflow: 'hidden' }}>
             <video ref={videoRef} muted playsInline autoPlay loop style={{ display: "none" }}>
                 <source src="/test.mp4" type="video/mp4" />
             </video>
-            <canvas ref={canvasRef} style={{ width: '100%', height: 'auto', display: 'block'}} />
+            <canvas ref={canvasRef} style={{ width: '100%', height: 'auto', display: 'block' }} />
         </div>
     );
 }
