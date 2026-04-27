@@ -6,16 +6,22 @@ import fragSrc from '../shaders/fragment.glsl';
 
 interface Props {
     src: string;
+    fontSize?: number;
     brightness?: number;
     saturation?: number;
     coloredBg?: boolean;
     initialEffect?: 0 | 1 | 2;
 }
 
-function AsciiVideoWebGL({ src, brightness = 1.4, saturation = 3.0, coloredBg = true, initialEffect = 0 }: Props) {
+function AsciiVideoWebGL({ src, fontSize = 12, brightness = 1.4, saturation = 3.0, coloredBg = true, initialEffect = 0 }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const atlasTextureRef = useRef<WebGLTexture | null>(null);
+
+    // prop checks
+    fontSize = Math.max(7, Math.min(35, fontSize));
+    brightness = Math.max(0.0, Math.min(2.0, brightness));
+    saturation = Math.max(0.0, Math.min(3.0, saturation));
 
     useEffect(() => {
         let sampleCtx: CanvasRenderingContext2D | null = null;
@@ -88,12 +94,6 @@ function AsciiVideoWebGL({ src, brightness = 1.4, saturation = 3.0, coloredBg = 
         // set effects
         const revealProgressLoc = gl.getUniformLocation(program, "u_revealProgress");
         gl.uniform1f(revealProgressLoc, 0.0);
-        if (brightness < 0.0 || brightness > 2.0) {
-            throw new Error("Brightness must be between 0 and 2.");
-        }
-        if (saturation < 0.0 || saturation > 3.0) {
-            throw new Error("Saturation must be between 0 and 3.");
-        }
         const brightnessLoc = gl.getUniformLocation(program, "u_brightness");
         gl.uniform1f(brightnessLoc, brightness);
         const saturationLoc = gl.getUniformLocation(program, "u_saturation");
@@ -211,7 +211,6 @@ function AsciiVideoWebGL({ src, brightness = 1.4, saturation = 3.0, coloredBg = 
             const hiddenCanvas = document.createElement('canvas');
             const hiddenCtx = hiddenCanvas.getContext('2d')!;
 
-            const fontSize = 15;
             hiddenCtx.font = `${fontSize}px monospace`;
             const charW = Math.ceil(hiddenCtx.measureText('M').width);
             const charH = fontSize;
