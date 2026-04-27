@@ -1,4 +1,3 @@
-import AsciiVideo from '../components/AsciiVideo'
 import AsciiVideoWebGLNoEdges from '../components/AsciiVideoWebGLNoEdges'
 import AsciiVideoWebGL from '../components/AsciiVideoWebGL'
 
