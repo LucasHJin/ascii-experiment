@@ -1,7 +1,11 @@
 precision highp float;
 
 // flags
-uniform bool u_coloredBg;
+uniform bool u_coloredBgFlag;
+uniform int u_initialEffectFlag;
+
+// effects
+uniform float u_revealProgress;
 
 uniform sampler2D u_texture;
 uniform sampler2D u_atlas;
@@ -14,6 +18,23 @@ uniform vec2 u_gridSize;
 void main() {
     vec2 fragCoord = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y); // flip y coords
     vec2 cellCoord = floor(fragCoord / u_cellsize);
+
+    if (u_initialEffectFlag == 1) {
+        // reveal effect -> show what should be revealed, make rest black
+        float revealThreshold = (cellCoord.x + cellCoord.y) / (u_gridSize.x + u_gridSize.y - 2.0);
+        if (revealThreshold > u_revealProgress) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+        }
+    } else if (u_initialEffectFlag == 2) {
+        float dist = length(cellCoord / u_gridSize - vec2(0.5));
+        float revealThreshold = dist / 0.7071; // sqrt of 0.5
+        if (revealThreshold > u_revealProgress) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+        }
+    }
+
     vec2 cellCenter = (cellCoord + 0.5) * u_cellsize; // figure out center pixel of cell
     vec2 uv = cellCenter / u_resolution; // normalize to 0-1
 
@@ -30,7 +51,7 @@ void main() {
     float glyphMask = texture2D(u_atlas, vec2(atlasU, atlasV)).r; // only need r to tell if there is white or black
 
     vec3 finalColor;
-    if (u_coloredBg) {
+    if (u_coloredBgFlag) {
         vec3 bgColor = cellColor * 0.3;
         finalColor = mix(bgColor, cellColor, glyphMask);
     } else {

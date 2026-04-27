@@ -6,9 +6,10 @@ import fragSrc from '../shaders/fragment.glsl';
 
 interface Props {
     coloredBg?: boolean;
+    initialEffect?: 0 | 1 | 2;
 }
 
-function AsciiVideoWebGL({ coloredBg = true }: Props) {
+function AsciiVideoWebGL({ coloredBg = true, initialEffect = 0 }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const atlasTextureRef = useRef<WebGLTexture | null>(null);
@@ -73,12 +74,25 @@ function AsciiVideoWebGL({ coloredBg = true }: Props) {
 
         let animFrameId: number;
         let lastTime = -1;
+        let startTime = -1;
 
         // set flags
-        const coloredBgLoc = gl.getUniformLocation(program, "u_coloredBg");
-        gl.uniform1i(coloredBgLoc, coloredBg ? 1 : 0);
+        const coloredBgFlagLoc = gl.getUniformLocation(program, "u_coloredBgFlag");
+        gl.uniform1i(coloredBgFlagLoc, coloredBg ? 1 : 0);
+        const initialEffectFlagLoc = gl.getUniformLocation(program, "u_initialEffectFlag");
+        gl.uniform1i(initialEffectFlagLoc, initialEffect);
+
+        // set effects
+        const revealProgressLoc = gl.getUniformLocation(program, "u_revealProgress");
+        gl.uniform1f(revealProgressLoc, 0.0);
 
         const loop = () => {
+            if (initialEffect !== 0) {
+                // use elapsed time to find reveal progress
+                const progress = startTime < 0 ? 0.0 : Math.min(1.0, (performance.now() - startTime) / 400.0);
+                gl.uniform1f(revealProgressLoc, progress);
+            }
+
             if (video.currentTime != lastTime && sampleCtx && charGridData) {
                 // draw frame onto scaled down sample canvas
                 sampleCtx.drawImage(video, 0, 0, sampleCtx.canvas.width, sampleCtx.canvas.height);
@@ -251,6 +265,7 @@ function AsciiVideoWebGL({ coloredBg = true }: Props) {
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video); 
 
             video.play();
+            startTime = performance.now();
             animFrameId = requestAnimationFrame(loop);
         };
 
@@ -268,7 +283,7 @@ function AsciiVideoWebGL({ coloredBg = true }: Props) {
             gl.deleteProgram(program);
             gl.deleteTexture(atlasTextureRef.current);
         }
-    }, [])
+    }, [coloredBg])
 
     return (
         <div style={{ width: '100%', height: 'auto', overflow: 'hidden' }}>
