@@ -1,13 +1,13 @@
 precision highp float;
 
 // flags
-uniform bool u_coloredBgFlag;
 uniform int u_initialEffectFlag;
 
 // effects
 uniform float u_revealProgress;
 uniform float u_brightness;
 uniform float u_saturation;
+uniform float u_bgIntensity;
 
 uniform sampler2D u_texture;
 uniform sampler2D u_atlas;
@@ -53,12 +53,8 @@ void main() {
     float glyphMask = texture2D(u_atlas, vec2(atlasU, atlasV)).r; // only need r to tell if there is white or black
 
     vec3 finalColor;
-    if (u_coloredBgFlag) {
-        vec3 bgColor = cellColor * 0.3;
-        finalColor = mix(bgColor, cellColor, glyphMask);
-    } else {
-        finalColor = cellColor * glyphMask;
-    }
+    vec3 bgColor = cellColor * u_bgIntensity;
+    finalColor = mix(bgColor, cellColor, glyphMask);
 
     gl_FragColor = vec4(finalColor, 1.0);
 }

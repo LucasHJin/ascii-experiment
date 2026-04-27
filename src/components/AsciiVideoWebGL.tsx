@@ -9,11 +9,18 @@ interface Props {
     fontSize?: number;
     brightness?: number;
     saturation?: number;
-    coloredBg?: boolean;
+    bgIntensity?: number;
     initialEffect?: 0 | 1 | 2;
 }
 
-function AsciiVideoWebGL({ src, fontSize = 12, brightness = 1.4, saturation = 3.0, coloredBg = true, initialEffect = 0 }: Props) {
+function AsciiVideoWebGL({ 
+        src, 
+        fontSize = 12, 
+        brightness = 1.4, 
+        saturation = 3.0, 
+        bgIntensity = 0.3,
+        initialEffect = 0,
+    }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const atlasTextureRef = useRef<WebGLTexture | null>(null);
@@ -22,6 +29,7 @@ function AsciiVideoWebGL({ src, fontSize = 12, brightness = 1.4, saturation = 3.
     fontSize = Math.max(7, Math.min(35, fontSize));
     brightness = Math.max(0.0, Math.min(2.0, brightness));
     saturation = Math.max(0.0, Math.min(3.0, saturation));
+    bgIntensity = Math.max(0.0, Math.min(1.0, bgIntensity));
 
     const sources = useMemo(() => Array.isArray(src) ? src : [src], [src]);
     const isMultiSource = sources.length > 1;
@@ -90,8 +98,6 @@ function AsciiVideoWebGL({ src, fontSize = 12, brightness = 1.4, saturation = 3.
         let currentVidIndex = 0;
 
         // set flags
-        const coloredBgFlagLoc = gl.getUniformLocation(program, "u_coloredBgFlag");
-        gl.uniform1i(coloredBgFlagLoc, coloredBg ? 1 : 0);
         const initialEffectFlagLoc = gl.getUniformLocation(program, "u_initialEffectFlag");
         gl.uniform1i(initialEffectFlagLoc, initialEffect);
 
@@ -102,6 +108,8 @@ function AsciiVideoWebGL({ src, fontSize = 12, brightness = 1.4, saturation = 3.
         gl.uniform1f(brightnessLoc, brightness);
         const saturationLoc = gl.getUniformLocation(program, "u_saturation");
         gl.uniform1f(saturationLoc, saturation);
+        const bgIntensityLoc = gl.getUniformLocation(program, "u_bgIntensity");
+        gl.uniform1f(bgIntensityLoc, bgIntensity);
 
         const loop = () => {
             if (initialEffect !== 0) {
@@ -313,7 +321,7 @@ function AsciiVideoWebGL({ src, fontSize = 12, brightness = 1.4, saturation = 3.
             gl.deleteProgram(program);
             gl.deleteTexture(atlasTextureRef.current);
         }
-    }, [coloredBg, brightness, initialEffect, saturation, fontSize, sources, isMultiSource])
+    }, [bgIntensity, brightness, initialEffect, saturation, fontSize, sources, isMultiSource])
 
     return (
         <div style={{ width: '100%', height: 'auto', overflow: 'hidden' }}>
