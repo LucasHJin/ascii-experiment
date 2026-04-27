@@ -1,11 +1,11 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useMemo } from "react";
 import { createProgram, createShader } from "../lib/webgl-utils";
 import { computeShapeVectors, SIMPLE_CIRCLES } from "../lib/ascii-utils";
 import vertSrc from '../shaders/vertex.glsl';
 import fragSrc from '../shaders/fragment.glsl';
 
 interface Props {
-    src: string;
+    src: string | string[]; // when calling, can't use inline array directly (or else if state rerenders, it will create a new array)
     fontSize?: number;
     brightness?: number;
     saturation?: number;
@@ -22,6 +22,9 @@ function AsciiVideoWebGL({ src, fontSize = 12, brightness = 1.4, saturation = 3.
     fontSize = Math.max(7, Math.min(35, fontSize));
     brightness = Math.max(0.0, Math.min(2.0, brightness));
     saturation = Math.max(0.0, Math.min(3.0, saturation));
+
+    const sources = useMemo(() => Array.isArray(src) ? src : [src], [src]);
+    const isMultiSource = sources.length > 1;
 
     useEffect(() => {
         let sampleCtx: CanvasRenderingContext2D | null = null;
@@ -84,6 +87,7 @@ function AsciiVideoWebGL({ src, fontSize = 12, brightness = 1.4, saturation = 3.
         let animFrameId: number;
         let lastTime = -1;
         let startTime = -1;
+        let currentVidIndex = 0;
 
         // set flags
         const coloredBgFlagLoc = gl.getUniformLocation(program, "u_coloredBgFlag");
@@ -106,7 +110,7 @@ function AsciiVideoWebGL({ src, fontSize = 12, brightness = 1.4, saturation = 3.
                 gl.uniform1f(revealProgressLoc, progress);
             }
 
-            if (video.currentTime != lastTime && sampleCtx && charGridData) {
+            if (video.currentTime != lastTime && video.readyState >= 2 && sampleCtx && charGridData) {
                 // draw frame onto scaled down sample canvas
                 sampleCtx.drawImage(video, 0, 0, sampleCtx.canvas.width, sampleCtx.canvas.height);
                 const imageData = sampleCtx.getImageData(0, 0, sampleCtx.canvas.width, sampleCtx.canvas.height);
@@ -281,11 +285,25 @@ function AsciiVideoWebGL({ src, fontSize = 12, brightness = 1.4, saturation = 3.
             animFrameId = requestAnimationFrame(loop);
         };
 
-        video.addEventListener("loadeddata", onLoaded);
+        const onEnded = () => {
+            // switch to next video and play it
+            currentVidIndex = (currentVidIndex + 1) % sources.length;
+            video.src = sources[currentVidIndex];
+            video.load();
+            video.addEventListener('canplay', () => video.play(), { once: true });
+        };
+
+        video.addEventListener("loadeddata", onLoaded, { once: true });
+        if (isMultiSource) {
+            video.addEventListener("ended", onEnded);
+        }
 
         return () => {
             cancelAnimationFrame(animFrameId);
             video.removeEventListener("loadeddata", onLoaded);
+            if (isMultiSource) {
+                video.removeEventListener("ended", onEnded);
+            }
 
             // gl cleanup (nice to have -> video should loop forever)
             gl.deleteTexture(texture);
@@ -295,12 +313,12 @@ function AsciiVideoWebGL({ src, fontSize = 12, brightness = 1.4, saturation = 3.
             gl.deleteProgram(program);
             gl.deleteTexture(atlasTextureRef.current);
         }
-    }, [coloredBg, brightness, initialEffect, saturation])
+    }, [coloredBg, brightness, initialEffect, saturation, fontSize, sources, isMultiSource])
 
     return (
         <div style={{ width: '100%', height: 'auto', overflow: 'hidden' }}>
-            <video ref={videoRef} muted playsInline autoPlay loop style={{ display: "none" }}>
-                <source src={src} type="video/mp4" />
+            <video ref={videoRef} muted playsInline autoPlay loop={!isMultiSource} style={{ display: "none" }}>
+                <source src={sources[0]} type="video/mp4" />
             </video>
             <canvas ref={canvasRef} style={{ width: '100%', height: 'auto', display: 'block' }} />
         </div>
