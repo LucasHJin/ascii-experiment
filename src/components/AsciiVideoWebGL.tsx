@@ -5,13 +5,14 @@ import vertSrc from '../shaders/vertex.glsl';
 import fragSrc from '../shaders/fragment.glsl';
 
 interface Props {
+    src: string;
     brightness?: number;
     saturation?: number;
     coloredBg?: boolean;
     initialEffect?: 0 | 1 | 2;
 }
 
-function AsciiVideoWebGL({ brightness = 1.4, saturation = 3.0, coloredBg = true, initialEffect = 0 }: Props) {
+function AsciiVideoWebGL({ src, brightness = 1.4, saturation = 3.0, coloredBg = true, initialEffect = 0 }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const atlasTextureRef = useRef<WebGLTexture | null>(null);
@@ -295,12 +296,12 @@ function AsciiVideoWebGL({ brightness = 1.4, saturation = 3.0, coloredBg = true,
             gl.deleteProgram(program);
             gl.deleteTexture(atlasTextureRef.current);
         }
-    }, [coloredBg])
+    }, [coloredBg, brightness, initialEffect, saturation])
 
     return (
         <div style={{ width: '100%', height: 'auto', overflow: 'hidden' }}>
             <video ref={videoRef} muted playsInline autoPlay loop style={{ display: "none" }}>
-                <source src="/test.mp4" type="video/mp4" />
+                <source src={src} type="video/mp4" />
             </video>
             <canvas ref={canvasRef} style={{ width: '100%', height: 'auto', display: 'block' }} />
         </div>
