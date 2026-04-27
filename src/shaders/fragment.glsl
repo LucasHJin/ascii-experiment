@@ -1,5 +1,8 @@
 precision highp float;
 
+// flags
+uniform bool u_coloredBg;
+
 uniform sampler2D u_texture;
 uniform sampler2D u_atlas;
 uniform vec2 u_resolution;
@@ -26,10 +29,13 @@ void main() {
     float atlasV = withinCellPos.y;
     float glyphMask = texture2D(u_atlas, vec2(atlasU, atlasV)).r; // only need r to tell if there is white or black
 
-    float bgAlpha = 0.3;
-    vec3 bgColor = cellColor * bgAlpha;
-    vec3 fgColor = cellColor;
-    vec3 finalColor = mix(bgColor, fgColor, glyphMask);
+    vec3 finalColor;
+    if (u_coloredBg) {
+        vec3 bgColor = cellColor * 0.3;
+        finalColor = mix(bgColor, cellColor, glyphMask);
+    } else {
+        finalColor = cellColor * glyphMask;
+    }
 
     gl_FragColor = vec4(finalColor, 1.0);
 }

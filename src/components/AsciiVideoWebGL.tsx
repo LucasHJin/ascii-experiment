@@ -4,7 +4,11 @@ import { computeShapeVectors, SIMPLE_CIRCLES } from "../lib/ascii-utils";
 import vertSrc from '../shaders/vertex.glsl';
 import fragSrc from '../shaders/fragment.glsl';
 
-function AsciiVideoWebGL() {
+interface Props {
+    coloredBg?: boolean;
+}
+
+function AsciiVideoWebGL({ coloredBg = true }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const atlasTextureRef = useRef<WebGLTexture | null>(null);
@@ -69,6 +73,10 @@ function AsciiVideoWebGL() {
 
         let animFrameId: number;
         let lastTime = -1;
+
+        // set flags
+        const coloredBgLoc = gl.getUniformLocation(program, "u_coloredBg");
+        gl.uniform1i(coloredBgLoc, coloredBg ? 1 : 0);
 
         const loop = () => {
             if (video.currentTime != lastTime && sampleCtx && charGridData) {
