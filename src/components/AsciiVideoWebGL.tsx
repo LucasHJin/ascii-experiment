@@ -5,11 +5,13 @@ import vertSrc from '../shaders/vertex.glsl';
 import fragSrc from '../shaders/fragment.glsl';
 
 interface Props {
+    brightness?: number;
+    saturation?: number;
     coloredBg?: boolean;
     initialEffect?: 0 | 1 | 2;
 }
 
-function AsciiVideoWebGL({ coloredBg = true, initialEffect = 0 }: Props) {
+function AsciiVideoWebGL({ brightness = 1.4, saturation = 3.0, coloredBg = true, initialEffect = 0 }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const atlasTextureRef = useRef<WebGLTexture | null>(null);
@@ -85,6 +87,16 @@ function AsciiVideoWebGL({ coloredBg = true, initialEffect = 0 }: Props) {
         // set effects
         const revealProgressLoc = gl.getUniformLocation(program, "u_revealProgress");
         gl.uniform1f(revealProgressLoc, 0.0);
+        if (brightness < 0.0 || brightness > 2.0) {
+            throw new Error("Brightness must be between 0 and 2.");
+        }
+        if (saturation < 0.0 || saturation > 3.0) {
+            throw new Error("Saturation must be between 0 and 3.");
+        }
+        const brightnessLoc = gl.getUniformLocation(program, "u_brightness");
+        gl.uniform1f(brightnessLoc, brightness);
+        const saturationLoc = gl.getUniformLocation(program, "u_saturation");
+        gl.uniform1f(saturationLoc, saturation);
 
         const loop = () => {
             if (initialEffect !== 0) {

@@ -6,6 +6,8 @@ uniform int u_initialEffectFlag;
 
 // effects
 uniform float u_revealProgress;
+uniform float u_brightness;
+uniform float u_saturation;
 
 uniform sampler2D u_texture;
 uniform sampler2D u_atlas;
@@ -40,8 +42,8 @@ void main() {
 
     vec3 cellColor = texture2D(u_texture, uv).rgb;
     float luminosity = dot(cellColor, vec3(0.299, 0.587, 0.114)); // luminance of pixel
-    cellColor = clamp(mix(vec3(luminosity), cellColor, 1.8), 0.0, 1.0); // increase saturation (clamped)
-    cellColor = pow(cellColor, vec3(0.6)); // boost brightness 
+    cellColor = clamp(mix(vec3(luminosity), cellColor, u_saturation), 0.0, 1.0); // increase saturation (clamped)
+    cellColor = pow(cellColor, vec3(2.0 - u_brightness)); // boost brightness 
 
     vec2 gridUV = (cellCoord + 0.5) / u_gridSize;
     float charInd = floor(texture2D(u_charGrid, gridUV).r * 255.0 + 0.5); // find charInd from char grid texture instead of luminance (convert back from Uint8Array storing as 0 to 1)
