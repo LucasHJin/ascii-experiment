@@ -16,7 +16,7 @@ function computeShapeVectors(chars: string, charW: number, charH: number): { cha
     const charCanvas = document.createElement("canvas");
     charCanvas.width = charW;
     charCanvas.height = charH;
-    const charCtx = charCanvas.getContext("2d");
+    const charCtx = charCanvas.getContext("2d", { willReadFrequently: true });
     if (!charCtx) return [];
     charCtx.font = `${charH}px monospace`;
     charCtx.textBaseline = 'top';
