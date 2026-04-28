@@ -18,6 +18,9 @@ interface Props {
     trailDuration?: number;
     mouseRadiusRatio?: number;
     mouseBrightness?: number;
+    clickEffect?: boolean;
+    clickBrightness?: number;
+    clickSpeed?: number;
     fit?: 'width' | 'height';
     className?: string;
 }
@@ -30,12 +33,15 @@ function AsciiVideoWebGL({
         saturation = 3.0,
         bgIntensity = 0.3,
         initialEffect = 0,
-        mouseEffect = true,
+        mouseEffect = false,
         trailLen = 15,
         trailFalloff = 10,
         trailDuration = 2000,
         mouseRadiusRatio = 0.08,
         mouseBrightness = 2.0,
+        clickEffect = false,
+        clickBrightness = 1.1,
+        clickSpeed = 2,
         fit = 'width',
         className,
     }: Props) {
@@ -53,6 +59,8 @@ function AsciiVideoWebGL({
     trailDuration = Math.max(100, Math.min(4000, trailDuration));
     mouseRadiusRatio = Math.max(0.03, Math.min(0.2, mouseRadiusRatio));
     mouseBrightness = Math.max(0.2, Math.min(5.0, mouseBrightness));
+    clickBrightness = Math.max(1.05, Math.min(2.0, clickBrightness));
+    clickSpeed = Math.max(0.5, Math.min(4.0, clickSpeed));
 
     const sources = useMemo(() => Array.isArray(src) ? src : [src], [src]);
     const isMultiSource = sources.length > 1;
@@ -67,7 +75,9 @@ function AsciiVideoWebGL({
         const cache = new Map<number, number>(); // cache vectors for faster lookups
         const SAMPLE_HEIGHT = 3;
         const SAMPLE_WIDTH = 2;
+        const MAX_RIPPLES = 10;
         const trail: { x: number, y: number, t: number }[] = [];
+        const ripples: { x: number, y: number, t: number }[] = [];
 
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -130,6 +140,8 @@ function AsciiVideoWebGL({
         gl.uniform1i(coloredFlagLoc, colored ? 1 : 0);
         const mouseEffectFlagLoc = gl.getUniformLocation(program, "u_mouseEffect");
         gl.uniform1i(mouseEffectFlagLoc, mouseEffect ? 1 : 0);
+        const clickEffectFlagLoc = gl.getUniformLocation(program, "u_clickEffect");
+        gl.uniform1i(clickEffectFlagLoc, clickEffect ? 1 : 0);
 
         // set effects
         const revealProgressLoc = gl.getUniformLocation(program, "u_revealProgress");
@@ -142,10 +154,16 @@ function AsciiVideoWebGL({
         gl.uniform1f(bgIntensityLoc, bgIntensity);
         const mouseBrightnessLoc = gl.getUniformLocation(program, "u_mouseBrightness");
         gl.uniform1f(mouseBrightnessLoc, mouseBrightness);
+        const clickBrightnessLoc = gl.getUniformLocation(program, "u_clickBrightness");
+        gl.uniform1f(clickBrightnessLoc, clickBrightness);
         // set mouse effect uniforms every frame
         const mousePositionsLoc = gl.getUniformLocation(program, "u_mousePositions");
         const mouseLifeFracsLoc = gl.getUniformLocation(program, "u_mouseLifeFracs");
         const mouseRadiusLoc = gl.getUniformLocation(program, "u_mouseRadius");
+        // set click effect uniforms every frame
+        const ripplePositionsLoc = gl.getUniformLocation(program, "u_ripplePositions");
+        const rippleRadiiLoc = gl.getUniformLocation(program, "u_rippleRadii");
+        const rippleBrightnessesLoc = gl.getUniformLocation(program, "u_rippleBrightnesses");
 
         const onMouseMove = (e: MouseEvent) => {
             const rect = canvas.getBoundingClientRect();
@@ -158,6 +176,19 @@ function AsciiVideoWebGL({
         };
         if (mouseEffect) {
             canvas.addEventListener("mousemove", onMouseMove);
+        }
+
+        const onClick = (e: MouseEvent) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            ripples.push({ x, y, t: performance.now() });
+            if (ripples.length > MAX_RIPPLES) { // if too many ripples -> get rid of earliest one
+                ripples.shift();
+            }
+        };
+        if (clickEffect) {
+            canvas.addEventListener("click", onClick);
         }
 
         const loop = () => {
@@ -270,6 +301,29 @@ function AsciiVideoWebGL({
                 gl.uniform1fv(mouseLifeFracsLoc, lifeFracs);
             }
 
+            if (clickEffect) {
+                const now = performance.now();
+                const maxDist = Math.hypot(canvas.width, canvas.height); // disc grows past the canvas before brightness reaches 1.0
+                const ripplePositions = new Float32Array(MAX_RIPPLES * 2);
+                const rippleRadii = new Float32Array(MAX_RIPPLES);
+                const rippleBrightnesses = new Float32Array(MAX_RIPPLES);
+                while (ripples.length > 0 && (now - ripples[0].t) * clickSpeed >= maxDist) {
+                    ripples.shift(); // get rid of ripples which should have shifted past max distance (no longer visible)
+                }
+                for (let i = 0; i < ripples.length; i++) {
+                    const radius = (now - ripples[i].t) * clickSpeed;
+                    const t = radius / maxDist; // how close it is to original click
+                    const brightness = 1.0 + (clickBrightness - 1.0) * (1 - t ** 2); // fade brightness with time (slow fade early on)
+                    ripplePositions[i * 2] = ripples[i].x;
+                    ripplePositions[i * 2 + 1] = ripples[i].y;
+                    rippleRadii[i] = radius;
+                    rippleBrightnesses[i] = brightness;
+                }
+                gl.uniform2fv(ripplePositionsLoc, ripplePositions);
+                gl.uniform1fv(rippleRadiiLoc, rippleRadii);
+                gl.uniform1fv(rippleBrightnessesLoc, rippleBrightnesses);
+            }
+
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             animFrameId = requestAnimationFrame(loop);
         }
@@ -284,7 +338,7 @@ function AsciiVideoWebGL({
             const resLoc = gl.getUniformLocation(program, "u_resolution");
             gl.uniform2f(resLoc, canvas.width, canvas.height);
 
-            gl.uniform1f(mouseRadiusLoc, Math.min(canvas.width, canvas.height) * mouseRadiusRatio); 
+            gl.uniform1f(mouseRadiusLoc, Math.min(canvas.width, canvas.height) * mouseRadiusRatio);
 
             // write character ramp onto a hidden canvas (and then turn it into a texture to sample from)
             const CHARS = " .'`^\",:;~-_+=*!?/\\|()[]{}<>iIl1tTfLjJrRsSzZcCvVnNmMwWxXyY0OoQq9&%#@$";
@@ -383,6 +437,9 @@ function AsciiVideoWebGL({
             if (mouseEffect) {
                 canvas.removeEventListener("mousemove", onMouseMove);
             }
+            if (clickEffect) {
+                canvas.removeEventListener("click", onClick);
+            }
 
             // gl cleanup (nice to have -> video should loop forever)
             gl.deleteTexture(texture);
@@ -405,7 +462,10 @@ function AsciiVideoWebGL({
         trailFalloff, 
         trailDuration, 
         mouseRadiusRatio,
-        mouseBrightness    
+        mouseBrightness,
+        clickEffect,
+        clickBrightness,
+        clickSpeed,
     ])
 
     // renders video with preserved aspect ratio

@@ -20,6 +20,12 @@ uniform float u_mouseLifeFracs[MOUSE_TRAIL_LEN]; // radius of trail + determines
 uniform float u_mouseRadius;
 uniform float u_mouseBrightness;
 
+uniform bool u_clickEffect;
+#define MAX_RIPPLES 10
+uniform vec2 u_ripplePositions[MAX_RIPPLES];
+uniform float u_rippleRadii[MAX_RIPPLES]; // current disc radius in pixels
+uniform float u_rippleBrightnesses[MAX_RIPPLES]; // applied brightness per ripple
+
 uniform sampler2D u_texture;
 uniform sampler2D u_atlas;
 uniform vec2 u_resolution;
@@ -86,6 +92,22 @@ void main() {
         }
         if (inside) {
             finalColor = clamp(finalColor * u_mouseBrightness, 0.0, 1.0); // increase brightness
+        }
+    }
+
+    if (u_clickEffect) {
+        // Find total brightness multiplier
+        float boost = 1.0;
+        for (int i = 0; i < MAX_RIPPLES; i++) {
+            if (u_rippleBrightnesses[i] <= 1.0) {
+                continue; // needs to increase brightness (else ignored)
+            }
+            if (distance(cellCenter, u_ripplePositions[i]) < u_rippleRadii[i]) {
+                boost *= u_rippleBrightnesses[i]; // overlapping discs stack
+            }
+        }
+        if (boost > 1.0) {
+            finalColor = clamp(finalColor * boost, 0.0, 1.0);
         }
     }
 
