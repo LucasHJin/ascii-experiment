@@ -7,6 +7,7 @@ import fragSrc from '../shaders/fragment.glsl';
 interface Props {
     src: string | string[]; // when calling, can't use inline array directly (or else if state rerenders, it will create a new array)
     fontSize?: number;
+    colored?: boolean;
     brightness?: number;
     saturation?: number;
     bgIntensity?: number;
@@ -16,6 +17,7 @@ interface Props {
 function AsciiVideoWebGL({ 
         src, 
         fontSize = 12, 
+        colored = true,
         brightness = 1.4, 
         saturation = 3.0, 
         bgIntensity = 0.3,
@@ -100,6 +102,8 @@ function AsciiVideoWebGL({
         // set flags
         const initialEffectFlagLoc = gl.getUniformLocation(program, "u_initialEffectFlag");
         gl.uniform1i(initialEffectFlagLoc, initialEffect);
+        const coloredFlagLoc = gl.getUniformLocation(program, "u_coloredFlag");
+        gl.uniform1i(coloredFlagLoc, colored ? 1 : 0);
 
         // set effects
         const revealProgressLoc = gl.getUniformLocation(program, "u_revealProgress");
@@ -321,7 +325,7 @@ function AsciiVideoWebGL({
             gl.deleteProgram(program);
             gl.deleteTexture(atlasTextureRef.current);
         }
-    }, [bgIntensity, brightness, initialEffect, saturation, fontSize, sources, isMultiSource])
+    }, [bgIntensity, brightness, initialEffect, saturation, fontSize, sources, isMultiSource, colored])
 
     return (
         <div style={{ width: '100%', height: 'auto', overflow: 'hidden' }}>
