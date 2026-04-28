@@ -13,6 +13,11 @@ interface Props {
     bgIntensity?: number;
     initialEffect?: 0 | 1 | 2;
     mouseEffect?: boolean;
+    trailLen?: number;
+    trailFalloff?: number;
+    trailDuration?: number;
+    mouseRadiusRatio?: number;
+    mouseBrightness?: number;
 }
 
 function AsciiVideoWebGL({
@@ -24,6 +29,11 @@ function AsciiVideoWebGL({
         bgIntensity = 0.3,
         initialEffect = 0,
         mouseEffect = true,
+        trailLen = 15,
+        trailFalloff = 10,
+        trailDuration = 2000,
+        mouseRadiusRatio = 0.08,
+        mouseBrightness = 2.0,
     }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -34,6 +44,11 @@ function AsciiVideoWebGL({
     brightness = Math.max(0.0, Math.min(2.0, brightness));
     saturation = Math.max(0.0, Math.min(3.0, saturation));
     bgIntensity = Math.max(0.0, Math.min(1.0, bgIntensity));
+    trailLen = Math.max(0, Math.min(30, Math.round(trailLen)));
+    trailFalloff = Math.max(1, Math.min(15, trailFalloff));
+    trailDuration = Math.max(100, Math.min(4000, trailDuration));
+    mouseRadiusRatio = Math.max(0.03, Math.min(0.2, mouseRadiusRatio));
+    mouseBrightness = Math.max(0.2, Math.min(5.0, mouseBrightness));
 
     const sources = useMemo(() => Array.isArray(src) ? src : [src], [src]);
     const isMultiSource = sources.length > 1;
@@ -48,10 +63,6 @@ function AsciiVideoWebGL({
         const cache = new Map<number, number>(); // cache vectors for faster lookups
         const SAMPLE_HEIGHT = 3;
         const SAMPLE_WIDTH = 2;
-        const TRAIL_LEN = 15;
-        const TRAIL_FALLOFF = 5;
-        const TRAIL_DURATION_MS = 1000;
-        const MOUSE_RADIUS_RATIO = 0.08;
         const trail: { x: number, y: number, t: number }[] = [];
 
         const canvas = canvasRef.current;
@@ -113,6 +124,8 @@ function AsciiVideoWebGL({
         gl.uniform1i(initialEffectFlagLoc, initialEffect);
         const coloredFlagLoc = gl.getUniformLocation(program, "u_coloredFlag");
         gl.uniform1i(coloredFlagLoc, colored ? 1 : 0);
+        const mouseEffectFlagLoc = gl.getUniformLocation(program, "u_mouseEffect");
+        gl.uniform1i(mouseEffectFlagLoc, mouseEffect ? 1 : 0);
 
         // set effects
         const revealProgressLoc = gl.getUniformLocation(program, "u_revealProgress");
@@ -123,8 +136,8 @@ function AsciiVideoWebGL({
         gl.uniform1f(saturationLoc, saturation);
         const bgIntensityLoc = gl.getUniformLocation(program, "u_bgIntensity");
         gl.uniform1f(bgIntensityLoc, bgIntensity);
-        const mouseEffectLoc = gl.getUniformLocation(program, "u_mouseEffect");
-        gl.uniform1i(mouseEffectLoc, mouseEffect ? 1 : 0);
+        const mouseBrightnessLoc = gl.getUniformLocation(program, "u_mouseBrightness");
+        gl.uniform1f(mouseBrightnessLoc, mouseBrightness);
         // set mouse effect uniforms every frame
         const mousePositionsLoc = gl.getUniformLocation(program, "u_mousePositions");
         const mouseLifeFracsLoc = gl.getUniformLocation(program, "u_mouseLifeFracs");
@@ -135,8 +148,8 @@ function AsciiVideoWebGL({
             const x = (e.clientX - rect.left) * (canvas.width / rect.width); // get it in terms of canvas pixel coords
             const y = (e.clientY - rect.top) * (canvas.height / rect.height);
             trail.push({ x, y, t: performance.now() });
-            if (trail.length > TRAIL_LEN) {
-                trail.shift(); // max TRAIL_LEN frames in trail buffer
+            if (trail.length > trailLen) {
+                trail.shift();
             }
         };
         if (mouseEffect) {
@@ -239,12 +252,12 @@ function AsciiVideoWebGL({
 
             if (mouseEffect) {
                 const now = performance.now();
-                const positions = new Float32Array(TRAIL_LEN * 2);
-                const lifeFracs = new Float32Array(TRAIL_LEN);
+                const positions = new Float32Array(trailLen * 2);
+                const lifeFracs = new Float32Array(trailLen);
                 for (let i = 0; i < trail.length; i++) {
                     const age = now - trail[i].t;
-                    const linearLife = Math.max(0, 1 - age / TRAIL_DURATION_MS);
-                    const lifeFrac = linearLife ** TRAIL_FALLOFF; // ease-out -> fast shrink early
+                    const linearLife = Math.max(0, 1 - age / trailDuration);
+                    const lifeFrac = linearLife ** trailFalloff;
                     positions[i * 2] = trail[i].x;
                     positions[i * 2 + 1] = trail[i].y;
                     lifeFracs[i] = lifeFrac;
@@ -267,7 +280,7 @@ function AsciiVideoWebGL({
             const resLoc = gl.getUniformLocation(program, "u_resolution");
             gl.uniform2f(resLoc, canvas.width, canvas.height);
 
-            gl.uniform1f(mouseRadiusLoc, Math.min(canvas.width, canvas.height) * MOUSE_RADIUS_RATIO); 
+            gl.uniform1f(mouseRadiusLoc, Math.min(canvas.width, canvas.height) * mouseRadiusRatio); 
 
             // write character ramp onto a hidden canvas (and then turn it into a texture to sample from)
             const CHARS = " .'`^\",:;~-_+=*!?/\\|()[]{}<>iIl1tTfLjJrRsSzZcCvVnNmMwWxXyY0OoQq9&%#@$";
@@ -375,7 +388,21 @@ function AsciiVideoWebGL({
             gl.deleteProgram(program);
             gl.deleteTexture(atlasTextureRef.current);
         }
-    }, [bgIntensity, brightness, initialEffect, saturation, fontSize, sources, isMultiSource, colored, mouseEffect])
+    }, [bgIntensity, 
+        brightness, 
+        initialEffect, 
+        saturation, 
+        fontSize, 
+        sources, 
+        isMultiSource, 
+        colored, 
+        mouseEffect, 
+        trailLen, 
+        trailFalloff, 
+        trailDuration, 
+        mouseRadiusRatio,
+        mouseBrightness    
+    ])
 
     return (
         <div style={{ width: '100%', height: 'auto', overflow: 'hidden' }}>

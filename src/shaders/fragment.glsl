@@ -14,10 +14,11 @@ uniform float u_saturation;
 uniform float u_bgIntensity;
 
 uniform bool u_mouseEffect;
-#define MOUSE_TRAIL_LEN 15
+#define MOUSE_TRAIL_LEN 30 // note -> need this value to be a compile time constant (set to max of 30)
 uniform vec2 u_mousePositions[MOUSE_TRAIL_LEN];
 uniform float u_mouseLifeFracs[MOUSE_TRAIL_LEN]; // radius of trail + determines if expired (0)
 uniform float u_mouseRadius;
+uniform float u_mouseBrightness;
 
 uniform sampler2D u_texture;
 uniform sampler2D u_atlas;
@@ -84,7 +85,7 @@ void main() {
             }
         }
         if (inside) {
-            finalColor = clamp(finalColor * 2.0, 0.0, 1.0); // increase brightness
+            finalColor = clamp(finalColor * u_mouseBrightness, 0.0, 1.0); // increase brightness
         }
     }
 
