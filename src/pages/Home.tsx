@@ -5,7 +5,7 @@ function Home() {
   return (
     <div style={{ width: '100vw', height: '100vh'}}>
         <AsciiVideoWebGL 
-          src={'/m1.mp4'} 
+          src={'/test.mp4'} 
           fontSize={12} 
           colored={true}
           brightness={1.2} 

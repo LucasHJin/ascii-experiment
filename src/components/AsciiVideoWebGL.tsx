@@ -53,8 +53,10 @@ function AsciiVideoWebGL({
         const video = videoRef.current;
         if (!video) return;
 
-        const gl = canvas.getContext("webgl");
+        const gl = canvas.getContext("webgl2");
         if (!gl) return;
+
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); // rows start immeediately after last byte of previous one (not in multiples of 4)
 
         const vertShader = createShader(gl, gl.VERTEX_SHADER, vertSrc);
         const fragShader = createShader(gl, gl.FRAGMENT_SHADER, fragSrc);
@@ -191,7 +193,7 @@ function AsciiVideoWebGL({
                         }
 
                         // write to char grid
-                        const gridIndex = (row * gridCols + col) * 4;
+                        const gridIndex = row * gridCols + col;
                         charGridData[gridIndex] = charIndex;
                     }
                 }
@@ -199,7 +201,7 @@ function AsciiVideoWebGL({
                 // upload char grid to GPU
                 gl.activeTexture(gl.TEXTURE2);
                 gl.bindTexture(gl.TEXTURE_2D, charGridTexture!);
-                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gridCols, gridRows, gl.RGBA, gl.UNSIGNED_BYTE, charGridData!);
+                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gridCols, gridRows, gl.RED_INTEGER, gl.UNSIGNED_BYTE, charGridData);
 
                 // upload video frame to GPU
                 gl.activeTexture(gl.TEXTURE0);
@@ -236,7 +238,7 @@ function AsciiVideoWebGL({
             gridCols = Math.floor(canvas.width / charW);
             gridRows = Math.floor(canvas.height / charH);
             // charGridData -> tells you character index that wins at each cell (each cell has one character) 
-            charGridData = new Uint8Array(gridCols * gridRows * 4);
+            charGridData = new Uint8Array(gridCols * gridRows);
             charGridTexture = gl.createTexture();
             gl.activeTexture(gl.TEXTURE2);
             gl.bindTexture(gl.TEXTURE_2D, charGridTexture);
@@ -244,7 +246,7 @@ function AsciiVideoWebGL({
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gridCols, gridRows, 0, gl.RGBA, gl.UNSIGNED_BYTE, charGridData);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, gridCols, gridRows, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, charGridData);
             const charGridLoc = gl.getUniformLocation(program, "u_charGrid");
             gl.uniform1i(charGridLoc, 2);
             const gridSizeLoc = gl.getUniformLocation(program, "u_gridSize");
