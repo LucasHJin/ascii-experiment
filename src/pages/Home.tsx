@@ -17,6 +17,7 @@ function Home() {
           trailDuration={2000}
           mouseRadiusRatio={0.08}
           mouseBrightness={2.0}
+          fit={'width'}
         />
     </div>
   )

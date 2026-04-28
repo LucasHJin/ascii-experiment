@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo } from "react";
+import React, { useRef, useEffect, useMemo } from "react";
 import { createProgram, createShader } from "../lib/webgl-utils";
 import { computeShapeVectors, SIMPLE_CIRCLES } from "../lib/ascii-utils";
 import vertSrc from '../shaders/vertex.glsl';
@@ -18,6 +18,8 @@ interface Props {
     trailDuration?: number;
     mouseRadiusRatio?: number;
     mouseBrightness?: number;
+    fit?: 'width' | 'height';
+    className?: string;
 }
 
 function AsciiVideoWebGL({
@@ -34,6 +36,8 @@ function AsciiVideoWebGL({
         trailDuration = 2000,
         mouseRadiusRatio = 0.08,
         mouseBrightness = 2.0,
+        fit = 'width',
+        className,
     }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -404,12 +408,17 @@ function AsciiVideoWebGL({
         mouseBrightness    
     ])
 
+    // renders video with preserved aspect ratio
+    const canvasStyle: React.CSSProperties = fit === 'height'
+        ? { height: '100%', width: 'auto', display: 'block' }
+        : { width: '100%', height: 'auto', display: 'block' };
+
     return (
-        <div style={{ width: '100%', height: 'auto', overflow: 'hidden' }}>
+        <div className={className} style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
             <video ref={videoRef} muted playsInline autoPlay loop={!isMultiSource} style={{ display: "none" }}>
                 <source src={sources[0]} type="video/mp4" />
             </video>
-            <canvas ref={canvasRef} style={{ width: '100%', height: 'auto', display: 'block' }} />
+            <canvas ref={canvasRef} style={canvasStyle} />
         </div>
     );
 }
