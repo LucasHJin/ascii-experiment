@@ -12,16 +12,18 @@ interface Props {
     saturation?: number;
     bgIntensity?: number;
     initialEffect?: 0 | 1 | 2;
+    mouseEffect?: boolean;
 }
 
-function AsciiVideoWebGL({ 
-        src, 
-        fontSize = 12, 
+function AsciiVideoWebGL({
+        src,
+        fontSize = 12,
         colored = true,
-        brightness = 1.4, 
-        saturation = 3.0, 
+        brightness = 1.4,
+        saturation = 3.0,
         bgIntensity = 0.3,
         initialEffect = 0,
+        mouseEffect = true,
     }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -46,6 +48,11 @@ function AsciiVideoWebGL({
         const cache = new Map<number, number>(); // cache vectors for faster lookups
         const SAMPLE_HEIGHT = 3;
         const SAMPLE_WIDTH = 2;
+        const TRAIL_LEN = 15;
+        const TRAIL_FALLOFF = 5;
+        const TRAIL_DURATION_MS = 1000;
+        const MOUSE_RADIUS_RATIO = 0.08;
+        const trail: { x: number, y: number, t: number }[] = [];
 
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -116,6 +123,25 @@ function AsciiVideoWebGL({
         gl.uniform1f(saturationLoc, saturation);
         const bgIntensityLoc = gl.getUniformLocation(program, "u_bgIntensity");
         gl.uniform1f(bgIntensityLoc, bgIntensity);
+        const mouseEffectLoc = gl.getUniformLocation(program, "u_mouseEffect");
+        gl.uniform1i(mouseEffectLoc, mouseEffect ? 1 : 0);
+        // set mouse effect uniforms every frame
+        const mousePositionsLoc = gl.getUniformLocation(program, "u_mousePositions");
+        const mouseLifeFracsLoc = gl.getUniformLocation(program, "u_mouseLifeFracs");
+        const mouseRadiusLoc = gl.getUniformLocation(program, "u_mouseRadius");
+
+        const onMouseMove = (e: MouseEvent) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (canvas.width / rect.width); // get it in terms of canvas pixel coords
+            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            trail.push({ x, y, t: performance.now() });
+            if (trail.length > TRAIL_LEN) {
+                trail.shift(); // max TRAIL_LEN frames in trail buffer
+            }
+        };
+        if (mouseEffect) {
+            canvas.addEventListener("mousemove", onMouseMove);
+        }
 
         const loop = () => {
             if (initialEffect !== 0) {
@@ -210,6 +236,23 @@ function AsciiVideoWebGL({
 
                 lastTime = video.currentTime;
             }
+
+            if (mouseEffect) {
+                const now = performance.now();
+                const positions = new Float32Array(TRAIL_LEN * 2);
+                const lifeFracs = new Float32Array(TRAIL_LEN);
+                for (let i = 0; i < trail.length; i++) {
+                    const age = now - trail[i].t;
+                    const linearLife = Math.max(0, 1 - age / TRAIL_DURATION_MS);
+                    const lifeFrac = linearLife ** TRAIL_FALLOFF; // ease-out -> fast shrink early
+                    positions[i * 2] = trail[i].x;
+                    positions[i * 2 + 1] = trail[i].y;
+                    lifeFracs[i] = lifeFrac;
+                }
+                gl.uniform2fv(mousePositionsLoc, positions);
+                gl.uniform1fv(mouseLifeFracsLoc, lifeFracs);
+            }
+
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             animFrameId = requestAnimationFrame(loop);
         }
@@ -223,6 +266,8 @@ function AsciiVideoWebGL({
             // set resolution with video ratio as well
             const resLoc = gl.getUniformLocation(program, "u_resolution");
             gl.uniform2f(resLoc, canvas.width, canvas.height);
+
+            gl.uniform1f(mouseRadiusLoc, Math.min(canvas.width, canvas.height) * MOUSE_RADIUS_RATIO); 
 
             // write character ramp onto a hidden canvas (and then turn it into a texture to sample from)
             const CHARS = " .'`^\",:;~-_+=*!?/\\|()[]{}<>iIl1tTfLjJrRsSzZcCvVnNmMwWxXyY0OoQq9&%#@$";
@@ -318,6 +363,9 @@ function AsciiVideoWebGL({
             if (isMultiSource) {
                 video.removeEventListener("ended", onEnded);
             }
+            if (mouseEffect) {
+                canvas.removeEventListener("mousemove", onMouseMove);
+            }
 
             // gl cleanup (nice to have -> video should loop forever)
             gl.deleteTexture(texture);
@@ -327,7 +375,7 @@ function AsciiVideoWebGL({
             gl.deleteProgram(program);
             gl.deleteTexture(atlasTextureRef.current);
         }
-    }, [bgIntensity, brightness, initialEffect, saturation, fontSize, sources, isMultiSource, colored])
+    }, [bgIntensity, brightness, initialEffect, saturation, fontSize, sources, isMultiSource, colored, mouseEffect])
 
     return (
         <div style={{ width: '100%', height: 'auto', overflow: 'hidden' }}>

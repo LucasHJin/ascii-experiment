@@ -13,6 +13,12 @@ uniform float u_brightness;
 uniform float u_saturation;
 uniform float u_bgIntensity;
 
+uniform bool u_mouseEffect;
+#define MOUSE_TRAIL_LEN 15
+uniform vec2 u_mousePositions[MOUSE_TRAIL_LEN];
+uniform float u_mouseLifeFracs[MOUSE_TRAIL_LEN]; // radius of trail + determines if expired (0)
+uniform float u_mouseRadius;
+
 uniform sampler2D u_texture;
 uniform sampler2D u_atlas;
 uniform vec2 u_resolution;
@@ -64,6 +70,23 @@ void main() {
     vec3 finalColor;
     vec3 bgColor = cellColor * u_bgIntensity;
     finalColor = mix(bgColor, cellColor, glyphMask);
+
+    if (u_mouseEffect) {
+        bool inside = false;
+        for (int i = 0; i < MOUSE_TRAIL_LEN; i++) {
+            if (u_mouseLifeFracs[i] <= 0.0) {
+                continue;
+            }
+            float r = u_mouseRadius * u_mouseLifeFracs[i];
+            if (distance(cellCenter, u_mousePositions[i]) < r) { // use cellCenter so it snaps to whole cells
+                inside = true;
+                break;
+            }
+        }
+        if (inside) {
+            finalColor = clamp(finalColor * 2.0, 0.0, 1.0); // increase brightness
+        }
+    }
 
     fragColor = vec4(finalColor, 1.0);
 }
