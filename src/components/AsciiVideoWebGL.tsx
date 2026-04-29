@@ -4,19 +4,23 @@ import { computeShapeVectors, SIMPLE_CIRCLES } from "../lib/ascii-utils";
 import vertSrc from '../shaders/vertex.glsl';
 import fragSrc from '../shaders/fragment.glsl';
 
+const DEFAULT_CHARS = " .'`^\",:;~-_+=*!?/\\|()[]{}<>iIl1tTfLjJrRsSzZcCvVnNmMwWxXyY0OoQq9&%#@$";
+
 interface Props {
     src: string | string[]; // when calling, can't use inline array directly (or else if state rerenders, it will create a new array)
     fontSize?: number;
     colored?: boolean;
     brightness?: number;
     saturation?: number;
-    bgIntensity?: number;
-    initialEffect?: 0 | 1 | 2;
+    bgOpacity?: number;
+    revealEffect?: 'none' | 'diagonal' | 'radial';
+    revealDuration?: number;
+    chars?: string;
     mouseEffect?: boolean;
     trailLen?: number;
-    trailFalloff?: number;
+    trailDecay?: number;
     trailDuration?: number;
-    mouseRadiusRatio?: number;
+    mouseRadius?: number;
     mouseBrightness?: number;
     clickEffect?: boolean;
     clickBrightness?: number;
@@ -30,14 +34,16 @@ function AsciiVideoWebGL({
         fontSize = 12,
         colored = true,
         brightness = 1.4,
-        saturation = 3.0,
-        bgIntensity = 0.3,
-        initialEffect = 0,
+        saturation = 1.8,
+        bgOpacity = 0.3,
+        revealEffect = 'none',
+        revealDuration = 400,
+        chars = DEFAULT_CHARS,
         mouseEffect = false,
         trailLen = 15,
-        trailFalloff = 10,
+        trailDecay = 10,
         trailDuration = 2000,
-        mouseRadiusRatio = 0.08,
+        mouseRadius = 0.08,
         mouseBrightness = 2.0,
         clickEffect = false,
         clickBrightness = 1.1,
@@ -53,14 +59,17 @@ function AsciiVideoWebGL({
     fontSize = Math.max(7, Math.min(35, fontSize));
     brightness = Math.max(0.0, Math.min(2.0, brightness));
     saturation = Math.max(0.0, Math.min(3.0, saturation));
-    bgIntensity = Math.max(0.0, Math.min(1.0, bgIntensity));
+    bgOpacity = Math.max(0.0, Math.min(1.0, bgOpacity));
+    revealDuration = Math.max(100, Math.min(4000, revealDuration));
     trailLen = Math.max(0, Math.min(30, Math.round(trailLen)));
-    trailFalloff = Math.max(1, Math.min(15, trailFalloff));
+    trailDecay = Math.max(1, Math.min(15, trailDecay));
     trailDuration = Math.max(100, Math.min(4000, trailDuration));
-    mouseRadiusRatio = Math.max(0.03, Math.min(0.2, mouseRadiusRatio));
+    mouseRadius = Math.max(0.03, Math.min(0.2, mouseRadius));
     mouseBrightness = Math.max(0.2, Math.min(5.0, mouseBrightness));
     clickBrightness = Math.max(1.05, Math.min(2.0, clickBrightness));
     clickSpeed = Math.max(0.5, Math.min(4.0, clickSpeed));
+
+    const revealEffectFlag = revealEffect === 'diagonal' ? 1 : revealEffect === 'radial' ? 2 : 0;
 
     const sources = useMemo(() => Array.isArray(src) ? src : [src], [src]);
     const isMultiSource = sources.length > 1;
@@ -96,7 +105,7 @@ function AsciiVideoWebGL({
 
         const program = createProgram(gl, vertShader, fragShader);
         if (!program) return;
-        
+
         // x, y, u, v
         const data = new Float32Array([
             1.0, 1.0,
@@ -111,7 +120,7 @@ function AsciiVideoWebGL({
         gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
 
         const posLoc = gl.getAttribLocation(program, "a_position");
-        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0); 
+        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(posLoc);
 
         gl.useProgram(program);
@@ -134,8 +143,8 @@ function AsciiVideoWebGL({
         let currentVidIndex = 0;
 
         // set flags
-        const initialEffectFlagLoc = gl.getUniformLocation(program, "u_initialEffectFlag");
-        gl.uniform1i(initialEffectFlagLoc, initialEffect);
+        const revealEffectFlagLoc = gl.getUniformLocation(program, "u_revealEffectFlag");
+        gl.uniform1i(revealEffectFlagLoc, revealEffectFlag);
         const coloredFlagLoc = gl.getUniformLocation(program, "u_coloredFlag");
         gl.uniform1i(coloredFlagLoc, colored ? 1 : 0);
         const mouseEffectFlagLoc = gl.getUniformLocation(program, "u_mouseEffect");
@@ -150,8 +159,8 @@ function AsciiVideoWebGL({
         gl.uniform1f(brightnessLoc, brightness);
         const saturationLoc = gl.getUniformLocation(program, "u_saturation");
         gl.uniform1f(saturationLoc, saturation);
-        const bgIntensityLoc = gl.getUniformLocation(program, "u_bgIntensity");
-        gl.uniform1f(bgIntensityLoc, bgIntensity);
+        const bgOpacityLoc = gl.getUniformLocation(program, "u_bgOpacity");
+        gl.uniform1f(bgOpacityLoc, bgOpacity);
         const mouseBrightnessLoc = gl.getUniformLocation(program, "u_mouseBrightness");
         gl.uniform1f(mouseBrightnessLoc, mouseBrightness);
         const clickBrightnessLoc = gl.getUniformLocation(program, "u_clickBrightness");
@@ -192,9 +201,9 @@ function AsciiVideoWebGL({
         }
 
         const loop = () => {
-            if (initialEffect !== 0) {
+            if (revealEffect !== 'none') {
                 // use elapsed time to find reveal progress
-                const progress = startTime < 0 ? 0.0 : Math.min(1.0, (performance.now() - startTime) / 400.0);
+                const progress = startTime < 0 ? 0.0 : Math.min(1.0, (performance.now() - startTime) / revealDuration);
                 gl.uniform1f(revealProgressLoc, progress);
             }
 
@@ -203,12 +212,12 @@ function AsciiVideoWebGL({
                 sampleCtx.drawImage(video, 0, 0, sampleCtx.canvas.width, sampleCtx.canvas.height);
                 const imageData = sampleCtx.getImageData(0, 0, sampleCtx.canvas.width, sampleCtx.canvas.height);
                 const sw = sampleCtx.canvas.width;
-                
+
                 for (let row = 0; row < gridRows; row++) {
                     for (let col = 0; col < gridCols; col++) {
                         // build 6D sampling vector for every cell
                         const samplingVector: number[] = [];
-                        
+
                         // simpler sampling -> each pixel of a 3x2 cell
                         const cellX = col * SAMPLE_WIDTH;
                         const cellY = row * SAMPLE_HEIGHT;
@@ -292,7 +301,7 @@ function AsciiVideoWebGL({
                 for (let i = 0; i < trail.length; i++) {
                     const age = now - trail[i].t;
                     const linearLife = Math.max(0, 1 - age / trailDuration);
-                    const lifeFrac = linearLife ** trailFalloff;
+                    const lifeFrac = linearLife ** trailDecay;
                     positions[i * 2] = trail[i].x;
                     positions[i * 2 + 1] = trail[i].y;
                     lifeFracs[i] = lifeFrac;
@@ -338,10 +347,9 @@ function AsciiVideoWebGL({
             const resLoc = gl.getUniformLocation(program, "u_resolution");
             gl.uniform2f(resLoc, canvas.width, canvas.height);
 
-            gl.uniform1f(mouseRadiusLoc, Math.min(canvas.width, canvas.height) * mouseRadiusRatio);
+            gl.uniform1f(mouseRadiusLoc, Math.min(canvas.width, canvas.height) * mouseRadius);
 
             // write character ramp onto a hidden canvas (and then turn it into a texture to sample from)
-            const CHARS = " .'`^\",:;~-_+=*!?/\\|()[]{}<>iIl1tTfLjJrRsSzZcCvVnNmMwWxXyY0OoQq9&%#@$";
             const hiddenCanvas = document.createElement('canvas');
             const hiddenCtx = hiddenCanvas.getContext('2d')!;
 
@@ -350,10 +358,10 @@ function AsciiVideoWebGL({
             const charH = fontSize;
 
             // make char grid texture (one char index per cell) -> read red channel to find index
-            shapeData = computeShapeVectors(CHARS, charW, charH);
+            shapeData = computeShapeVectors(chars, charW, charH);
             gridCols = Math.floor(canvas.width / charW);
             gridRows = Math.floor(canvas.height / charH);
-            // charGridData -> tells you character index that wins at each cell (each cell has one character) 
+            // charGridData -> tells you character index that wins at each cell (each cell has one character)
             charGridData = new Uint8Array(gridCols * gridRows);
             charGridTexture = gl.createTexture();
             gl.activeTexture(gl.TEXTURE2);
@@ -374,7 +382,7 @@ function AsciiVideoWebGL({
             sampleCanvas.height = gridRows * SAMPLE_HEIGHT;
             sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true }); // keep canvas in cpu memory (faster read)
 
-            hiddenCanvas.width = CHARS.length * charW; // need to set width and height
+            hiddenCanvas.width = chars.length * charW; // need to set width and height
             hiddenCanvas.height = charH;
 
             // set cell size after dynamic measurement
@@ -383,12 +391,12 @@ function AsciiVideoWebGL({
 
             hiddenCtx.font = `${charH}px monospace`;
             hiddenCtx.fillStyle = 'black';
-            hiddenCtx.fillRect(0, 0, CHARS.length * charW, charH);
+            hiddenCtx.fillRect(0, 0, chars.length * charW, charH);
             hiddenCtx.fillStyle = 'white';
             hiddenCtx.textBaseline = 'top';
 
-            for (let c = 0; c < CHARS.length; c += 1) {
-                hiddenCtx.fillText(CHARS[c], c * charW, 0);
+            for (let c = 0; c < chars.length; c += 1) {
+                hiddenCtx.fillText(chars[c], c * charW, 0);
             }
 
             const atlasTexture = gl.createTexture();
@@ -403,12 +411,12 @@ function AsciiVideoWebGL({
             const atlasLoc = gl.getUniformLocation(program, "u_atlas");
             gl.uniform1i(atlasLoc, 1);
             const numLoc = gl.getUniformLocation(program, "u_numChars")
-            gl.uniform1f(numLoc, CHARS.length);
+            gl.uniform1f(numLoc, chars.length);
 
             // need to allocate memory for video once
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video); 
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
 
             video.play();
             startTime = performance.now();
@@ -449,19 +457,21 @@ function AsciiVideoWebGL({
             gl.deleteProgram(program);
             gl.deleteTexture(atlasTextureRef.current);
         }
-    }, [bgIntensity, 
-        brightness, 
-        initialEffect, 
-        saturation, 
-        fontSize, 
-        sources, 
-        isMultiSource, 
-        colored, 
-        mouseEffect, 
-        trailLen, 
-        trailFalloff, 
-        trailDuration, 
-        mouseRadiusRatio,
+    }, [bgOpacity,
+        brightness,
+        revealEffectFlag,
+        revealDuration,
+        chars,
+        saturation,
+        fontSize,
+        sources,
+        isMultiSource,
+        colored,
+        mouseEffect,
+        trailLen,
+        trailDecay,
+        trailDuration,
+        mouseRadius,
         mouseBrightness,
         clickEffect,
         clickBrightness,

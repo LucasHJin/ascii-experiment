@@ -4,14 +4,14 @@ precision highp float;
 precision highp usampler2D;
 
 // flags
-uniform int u_initialEffectFlag;
+uniform int u_revealEffectFlag;
 uniform bool u_coloredFlag;
 
 // effects
 uniform float u_revealProgress;
 uniform float u_brightness;
 uniform float u_saturation;
-uniform float u_bgIntensity;
+uniform float u_bgOpacity;
 
 uniform bool u_mouseEffect;
 #define MOUSE_TRAIL_LEN 30 // note -> need this value to be a compile time constant (set to max of 30)
@@ -40,14 +40,14 @@ void main() {
     vec2 fragCoord = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y); // flip y coords
     vec2 cellCoord = floor(fragCoord / u_cellsize);
 
-    if (u_initialEffectFlag == 1) {
+    if (u_revealEffectFlag == 1) {
         // reveal effect -> show what should be revealed, make rest black
         float revealThreshold = (cellCoord.x + cellCoord.y) / (u_gridSize.x + u_gridSize.y - 2.0);
         if (revealThreshold > u_revealProgress) {
             fragColor = vec4(0.0, 0.0, 0.0, 1.0);
             return;
         }
-    } else if (u_initialEffectFlag == 2) {
+    } else if (u_revealEffectFlag == 2) {
         float dist = length(cellCoord / u_gridSize - vec2(0.5));
         float revealThreshold = dist / 0.7071; // sqrt of 0.5
         if (revealThreshold > u_revealProgress) {
@@ -75,7 +75,7 @@ void main() {
     float glyphMask = texture(u_atlas, vec2(atlasU, atlasV)).r; // only need r to tell if there is white or black
 
     vec3 finalColor;
-    vec3 bgColor = cellColor * u_bgIntensity;
+    vec3 bgColor = cellColor * u_bgOpacity;
     finalColor = mix(bgColor, cellColor, glyphMask);
 
     if (u_mouseEffect) {
