@@ -43,7 +43,7 @@ function AsciiVideoWebGL({
         saturation = 1.8,
         bgOpacity = 0.3,
         revealEffect = 'none',
-        revealDuration = 400,
+        revealDuration = 0.4,
         chars = DEFAULT_CHARS,
         mouseEffect = true,
         clickEffect = true,
@@ -59,7 +59,7 @@ function AsciiVideoWebGL({
     const mouseOpts = typeof mouseEffect === 'object' ? mouseEffect : {};
     let trailLen = mouseOpts.trailLen ?? 15;
     let trailDecay = mouseOpts.trailDecay ?? 10;
-    let trailDuration = mouseOpts.trailDuration ?? 2000;
+    let trailDuration = mouseOpts.trailDuration ?? 2;
     let mouseRadius = mouseOpts.radius ?? 0.08;
     let mouseBrightness = mouseOpts.brightness ?? 2.0;
     const clickEnabled = !!clickEffect;
@@ -72,10 +72,10 @@ function AsciiVideoWebGL({
     brightness = Math.max(0.0, Math.min(2.0, brightness));
     saturation = Math.max(0.0, Math.min(3.0, saturation));
     bgOpacity = Math.max(0.0, Math.min(1.0, bgOpacity));
-    revealDuration = Math.max(100, Math.min(4000, revealDuration));
+    revealDuration = Math.max(0.1, Math.min(4, revealDuration));
     trailLen = Math.max(0, Math.min(30, Math.round(trailLen)));
     trailDecay = Math.max(1, Math.min(15, trailDecay));
-    trailDuration = Math.max(100, Math.min(4000, trailDuration));
+    trailDuration = Math.max(0.1, Math.min(4, trailDuration));
     mouseRadius = Math.max(0.03, Math.min(0.2, mouseRadius));
     mouseBrightness = Math.max(0.2, Math.min(5.0, mouseBrightness));
     clickBrightness = Math.max(1.05, Math.min(2.0, clickBrightness));
@@ -215,7 +215,7 @@ function AsciiVideoWebGL({
         const loop = () => {
             if (revealEffect !== 'none') {
                 // use elapsed time to find reveal progress
-                const progress = startTime < 0 ? 0.0 : Math.min(1.0, (performance.now() - startTime) / revealDuration);
+                const progress = startTime < 0 ? 0.0 : Math.min(1.0, (performance.now() - startTime) / (revealDuration * 1000));
                 gl.uniform1f(revealProgressLoc, progress);
             }
 
@@ -312,7 +312,7 @@ function AsciiVideoWebGL({
                 const lifeFracs = new Float32Array(trailLen);
                 for (let i = 0; i < trail.length; i++) {
                     const age = now - trail[i].t;
-                    const linearLife = Math.max(0, 1 - age / trailDuration);
+                    const linearLife = Math.max(0, 1 - age / (trailDuration * 1000));
                     const lifeFrac = linearLife ** trailDecay;
                     positions[i * 2] = trail[i].x;
                     positions[i * 2 + 1] = trail[i].y;
