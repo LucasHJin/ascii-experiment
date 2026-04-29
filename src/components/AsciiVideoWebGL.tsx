@@ -19,6 +19,11 @@ interface ClickEffectOptions {
     speed?: number;
 }
 
+interface RevealEffectOptions {
+    type?: 'diagonal' | 'radial';
+    duration?: number;
+}
+
 interface Props {
     src: string | string[]; // when calling, can't use inline array directly (or else if state rerenders, it will create a new array)
     fontSize?: number;
@@ -26,8 +31,7 @@ interface Props {
     brightness?: number;
     saturation?: number;
     bgOpacity?: number;
-    revealEffect?: 'none' | 'diagonal' | 'radial';
-    revealDuration?: number;
+    revealEffect?: boolean | RevealEffectOptions;
     chars?: string;
     mouseEffect?: boolean | MouseEffectOptions;
     clickEffect?: boolean | ClickEffectOptions;
@@ -42,8 +46,7 @@ function AsciiVideoWebGL({
         brightness = 1.4,
         saturation = 1.8,
         bgOpacity = 0.3,
-        revealEffect = 'none',
-        revealDuration = 0.4,
+        revealEffect = false,
         chars = DEFAULT_CHARS,
         mouseEffect = true,
         clickEffect = true,
@@ -62,10 +65,16 @@ function AsciiVideoWebGL({
     let trailDuration = mouseOpts.trailDuration ?? 2;
     let mouseRadius = mouseOpts.radius ?? 0.08;
     let mouseBrightness = mouseOpts.brightness ?? 2.0;
+
     const clickEnabled = !!clickEffect;
     const clickOpts = typeof clickEffect === 'object' ? clickEffect : {};
     let clickBrightness = clickOpts.brightness ?? 1.1;
     let clickSpeed = clickOpts.speed ?? 2;
+    
+    const revealEnabled = !!revealEffect;
+    const revealOpts = typeof revealEffect === 'object' ? revealEffect : {};
+    const revealType = revealOpts.type ?? 'diagonal';
+    let revealDuration = revealOpts.duration ?? 0.4;
 
     // prop checks
     fontSize = Math.max(7, Math.min(35, fontSize));
@@ -81,7 +90,7 @@ function AsciiVideoWebGL({
     clickBrightness = Math.max(1.05, Math.min(2.0, clickBrightness));
     clickSpeed = Math.max(0.5, Math.min(4.0, clickSpeed));
 
-    const revealEffectFlag = revealEffect === 'diagonal' ? 1 : revealEffect === 'radial' ? 2 : 0;
+    const revealEffectFlag = !revealEnabled ? 0 : revealType === 'radial' ? 2 : 1;
 
     const sources = useMemo(() => Array.isArray(src) ? src : [src], [src]);
     const isMultiSource = sources.length > 1;
@@ -213,7 +222,7 @@ function AsciiVideoWebGL({
         }
 
         const loop = () => {
-            if (revealEffect !== 'none') {
+            if (revealEnabled) {
                 // use elapsed time to find reveal progress
                 const progress = startTime < 0 ? 0.0 : Math.min(1.0, (performance.now() - startTime) / (revealDuration * 1000));
                 gl.uniform1f(revealProgressLoc, progress);
