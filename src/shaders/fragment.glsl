@@ -26,6 +26,8 @@ uniform vec2 u_ripplePositions[MAX_RIPPLES];
 uniform float u_rippleRadii[MAX_RIPPLES]; // current disc radius in pixels
 uniform float u_rippleBrightnesses[MAX_RIPPLES]; // applied brightness per ripple
 
+uniform bool u_shapeMatching;
+
 uniform sampler2D u_texture;
 uniform sampler2D u_atlas;
 uniform vec2 u_resolution;
@@ -68,7 +70,12 @@ void main() {
     }
     cellColor = pow(cellColor, vec3(2.0 - u_brightness)); // boost brightness
 
-    uint charInd = texelFetch(u_charGrid, ivec2(cellCoord), 0).r; // find charInd from char grid texture instead of luminance
+    uint charInd;
+    if (u_shapeMatching) {
+        charInd = texelFetch(u_charGrid, ivec2(cellCoord), 0).r;
+    } else {
+        charInd = uint(floor(luminosity * (u_numChars - 1.0)));
+    }
     vec2 withinCellPos = fract(fragCoord / u_cellsize); // need this to determine how a single pixel of atlas maps over (within a character)
     float atlasU = (float(charInd) + withinCellPos.x) / u_numChars;
     float atlasV = withinCellPos.y;

@@ -35,6 +35,7 @@ interface Props {
     chars?: string;
     mouseEffect?: boolean | MouseEffectOptions;
     clickEffect?: boolean | ClickEffectOptions;
+    charMode?: 'shape' | 'luminance';
     fit?: 'width' | 'height';
     className?: string;
 }
@@ -50,6 +51,7 @@ function AsciiVideoWebGL({
         chars = DEFAULT_CHARS,
         mouseEffect = true,
         clickEffect = true,
+        charMode = 'luminance',
         fit = 'width',
         className,
     }: Props) {
@@ -172,6 +174,8 @@ function AsciiVideoWebGL({
         gl.uniform1i(mouseEffectFlagLoc, mouseEnabled ? 1 : 0);
         const clickEffectFlagLoc = gl.getUniformLocation(program, "u_clickEffect");
         gl.uniform1i(clickEffectFlagLoc, clickEnabled ? 1 : 0);
+        const shapeMatchingLoc = gl.getUniformLocation(program, "u_shapeMatching");
+        gl.uniform1i(shapeMatchingLoc, charMode === 'shape' ? 1 : 0);
 
         // set effects
         const revealProgressLoc = gl.getUniformLocation(program, "u_revealProgress");
@@ -228,84 +232,86 @@ function AsciiVideoWebGL({
                 gl.uniform1f(revealProgressLoc, progress);
             }
 
-            if (video.currentTime != lastTime && video.readyState >= 2 && sampleCtx && charGridData) {
-                // draw frame onto scaled down sample canvas
-                sampleCtx.drawImage(video, 0, 0, sampleCtx.canvas.width, sampleCtx.canvas.height);
-                const imageData = sampleCtx.getImageData(0, 0, sampleCtx.canvas.width, sampleCtx.canvas.height);
-                const sw = sampleCtx.canvas.width;
+            if (video.currentTime != lastTime && video.readyState >= 2) {
+                if (sampleCtx && charGridData) {
+                    // draw frame onto scaled down sample canvas
+                    sampleCtx.drawImage(video, 0, 0, sampleCtx.canvas.width, sampleCtx.canvas.height);
+                    const imageData = sampleCtx.getImageData(0, 0, sampleCtx.canvas.width, sampleCtx.canvas.height);
+                    const sw = sampleCtx.canvas.width;
 
-                for (let row = 0; row < gridRows; row++) {
-                    for (let col = 0; col < gridCols; col++) {
-                        // build 6D sampling vector for every cell
-                        const samplingVector: number[] = [];
+                    for (let row = 0; row < gridRows; row++) {
+                        for (let col = 0; col < gridCols; col++) {
+                            // build 6D sampling vector for every cell
+                            const samplingVector: number[] = [];
 
-                        // simpler sampling -> each pixel of a 3x2 cell
-                        const cellX = col * SAMPLE_WIDTH;
-                        const cellY = row * SAMPLE_HEIGHT;
+                            // simpler sampling -> each pixel of a 3x2 cell
+                            const cellX = col * SAMPLE_WIDTH;
+                            const cellY = row * SAMPLE_HEIGHT;
 
-                        for (const [dx, dy] of SIMPLE_CIRCLES) {
-                            const i = ((cellY + dy) * sw + (cellX + dx)) * 4;
-                            const r = imageData.data[i] / 255;
-                            const g = imageData.data[i + 1] / 255;
-                            const b = imageData.data[i + 2] / 255;
-                            samplingVector.push(0.299 * r + 0.587 * g + 0.114 * b);
-                        }
-
-                        // contrast enhancement -> normalize, apply exponent, denormalize (preserve lighter values)
-                        let maxVal = 0;
-                        for (let d = 0; d < 6; d++) {
-                            if (samplingVector[d] > maxVal) {
-                                maxVal = samplingVector[d];
+                            for (const [dx, dy] of SIMPLE_CIRCLES) {
+                                const i = ((cellY + dy) * sw + (cellX + dx)) * 4;
+                                const r = imageData.data[i] / 255;
+                                const g = imageData.data[i + 1] / 255;
+                                const b = imageData.data[i + 2] / 255;
+                                samplingVector.push(0.299 * r + 0.587 * g + 0.114 * b);
                             }
-                        }
-                        if (maxVal > 0) {
-                            const EXPONENT = 2;
+
+                            // contrast enhancement -> normalize, apply exponent, denormalize (preserve lighter values)
+                            let maxVal = 0;
                             for (let d = 0; d < 6; d++) {
-                                const norm = samplingVector[d] / maxVal;
-                                samplingVector[d] = Math.pow(norm, EXPONENT) * maxVal;
+                                if (samplingVector[d] > maxVal) {
+                                    maxVal = samplingVector[d];
+                                }
                             }
-                        }
-
-                        // create cache key
-                        const RANGE = 6;
-                        let key = 0;
-                        for (let d = 0; d < RANGE; d++) {
-                            const q = Math.min(RANGE - 1, Math.floor(samplingVector[d] * RANGE)); // snap into a bucket (0 to 5)
-                            key = key * RANGE + q; // create a base 6 digit as key
-                        }
-
-                        // lookup -> either O(1) cache or brute force euclidean distance search (and then add to cache)
-                        let charIndex: number;
-                        if (cache.has(key)) {
-                            charIndex = cache.get(key)!;
-                        } else {
-                            let bestIndex = 0;
-                            let bestDist = Infinity;
-                            for (let i = 0; i < shapeData.length; i++) {
-                                let dist = 0;
+                            if (maxVal > 0) {
+                                const EXPONENT = 2;
                                 for (let d = 0; d < 6; d++) {
-                                    const diff = samplingVector[d] - shapeData[i].vector[d];
-                                    dist += diff * diff;
-                                }
-                                if (dist < bestDist) {
-                                    bestDist = dist;
-                                    bestIndex = i;
+                                    const norm = samplingVector[d] / maxVal;
+                                    samplingVector[d] = Math.pow(norm, EXPONENT) * maxVal;
                                 }
                             }
-                            charIndex = bestIndex;
-                            cache.set(key, charIndex);
+
+                            // create cache key
+                            const RANGE = 6;
+                            let key = 0;
+                            for (let d = 0; d < RANGE; d++) {
+                                const q = Math.min(RANGE - 1, Math.floor(samplingVector[d] * RANGE)); // snap into a bucket (0 to 5)
+                                key = key * RANGE + q; // create a base 6 digit as key
+                            }
+
+                            // lookup -> either O(1) cache or brute force euclidean distance search (and then add to cache)
+                            let charIndex: number;
+                            if (cache.has(key)) {
+                                charIndex = cache.get(key)!;
+                            } else {
+                                let bestIndex = 0;
+                                let bestDist = Infinity;
+                                for (let i = 0; i < shapeData.length; i++) {
+                                    let dist = 0;
+                                    for (let d = 0; d < 6; d++) {
+                                        const diff = samplingVector[d] - shapeData[i].vector[d];
+                                        dist += diff * diff;
+                                    }
+                                    if (dist < bestDist) {
+                                        bestDist = dist;
+                                        bestIndex = i;
+                                    }
+                                }
+                                charIndex = bestIndex;
+                                cache.set(key, charIndex);
+                            }
+
+                            // write to char grid
+                            const gridIndex = row * gridCols + col;
+                            charGridData[gridIndex] = charIndex;
                         }
-
-                        // write to char grid
-                        const gridIndex = row * gridCols + col;
-                        charGridData[gridIndex] = charIndex;
                     }
-                }
 
-                // upload char grid to GPU
-                gl.activeTexture(gl.TEXTURE2);
-                gl.bindTexture(gl.TEXTURE_2D, charGridTexture!);
-                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gridCols, gridRows, gl.RED_INTEGER, gl.UNSIGNED_BYTE, charGridData);
+                    // upload char grid to GPU
+                    gl.activeTexture(gl.TEXTURE2);
+                    gl.bindTexture(gl.TEXTURE_2D, charGridTexture!);
+                    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gridCols, gridRows, gl.RED_INTEGER, gl.UNSIGNED_BYTE, charGridData);
+                }
 
                 // upload video frame to GPU
                 gl.activeTexture(gl.TEXTURE0);
@@ -379,11 +385,15 @@ function AsciiVideoWebGL({
             const charH = fontSize;
 
             // make char grid texture (one char index per cell) -> read red channel to find index
-            shapeData = computeShapeVectors(chars, charW, charH);
+            if (charMode === 'shape') {
+                shapeData = computeShapeVectors(chars, charW, charH);
+            }
             gridCols = Math.floor(canvas.width / charW);
             gridRows = Math.floor(canvas.height / charH);
             // charGridData -> tells you character index that wins at each cell (each cell has one character)
-            charGridData = new Uint8Array(gridCols * gridRows);
+            if (charMode === 'shape') {
+                charGridData = new Uint8Array(gridCols * gridRows);
+            }
             charGridTexture = gl.createTexture();
             gl.activeTexture(gl.TEXTURE2);
             gl.bindTexture(gl.TEXTURE_2D, charGridTexture);
@@ -391,17 +401,19 @@ function AsciiVideoWebGL({
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, gridCols, gridRows, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, charGridData);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, gridCols, gridRows, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, null);
             const charGridLoc = gl.getUniformLocation(program, "u_charGrid");
             gl.uniform1i(charGridLoc, 2);
             const gridSizeLoc = gl.getUniformLocation(program, "u_gridSize");
             gl.uniform2f(gridSizeLoc, gridCols, gridRows);
 
-            // sampleCanvas is scaled down version of frame -> sample circle to find corresponding vector
-            const sampleCanvas = document.createElement('canvas');
-            sampleCanvas.width = gridCols * SAMPLE_WIDTH;
-            sampleCanvas.height = gridRows * SAMPLE_HEIGHT;
-            sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true }); // keep canvas in cpu memory (faster read)
+            // sampleCanvas is scaled down version of frame -> sample circle to find corresponding vector (shape mode only)
+            if (charMode === 'shape') {
+                const sampleCanvas = document.createElement('canvas');
+                sampleCanvas.width = gridCols * SAMPLE_WIDTH;
+                sampleCanvas.height = gridRows * SAMPLE_HEIGHT;
+                sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+            }
 
             hiddenCanvas.width = chars.length * charW; // need to set width and height
             hiddenCanvas.height = charH;
@@ -497,6 +509,7 @@ function AsciiVideoWebGL({
         clickEnabled,
         clickBrightness,
         clickSpeed,
+        charMode,
     ])
 
     // renders video with preserved aspect ratio
