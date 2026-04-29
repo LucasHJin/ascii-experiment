@@ -6,6 +6,19 @@ import fragSrc from '../shaders/fragment.glsl';
 
 const DEFAULT_CHARS = " .'`^\",:;~-_+=*!?/\\|()[]{}<>iIl1tTfLjJrRsSzZcCvVnNmMwWxXyY0OoQq9&%#@$";
 
+interface MouseEffectOptions {
+    trailLen?: number;
+    trailDecay?: number;
+    trailDuration?: number;
+    radius?: number;
+    brightness?: number;
+}
+
+interface ClickEffectOptions {
+    brightness?: number;
+    speed?: number;
+}
+
 interface Props {
     src: string | string[]; // when calling, can't use inline array directly (or else if state rerenders, it will create a new array)
     fontSize?: number;
@@ -16,15 +29,8 @@ interface Props {
     revealEffect?: 'none' | 'diagonal' | 'radial';
     revealDuration?: number;
     chars?: string;
-    mouseEffect?: boolean;
-    trailLen?: number;
-    trailDecay?: number;
-    trailDuration?: number;
-    mouseRadius?: number;
-    mouseBrightness?: number;
-    clickEffect?: boolean;
-    clickBrightness?: number;
-    clickSpeed?: number;
+    mouseEffect?: boolean | MouseEffectOptions;
+    clickEffect?: boolean | ClickEffectOptions;
     fit?: 'width' | 'height';
     className?: string;
 }
@@ -39,21 +45,27 @@ function AsciiVideoWebGL({
         revealEffect = 'none',
         revealDuration = 400,
         chars = DEFAULT_CHARS,
-        mouseEffect = false,
-        trailLen = 15,
-        trailDecay = 10,
-        trailDuration = 2000,
-        mouseRadius = 0.08,
-        mouseBrightness = 2.0,
-        clickEffect = false,
-        clickBrightness = 1.1,
-        clickSpeed = 2,
+        mouseEffect = true,
+        clickEffect = true,
         fit = 'width',
         className,
     }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const atlasTextureRef = useRef<WebGLTexture | null>(null);
+
+    // destructure  mouse and click effect (simpler top level api)
+    const mouseEnabled = !!mouseEffect;
+    const mouseOpts = typeof mouseEffect === 'object' ? mouseEffect : {};
+    let trailLen = mouseOpts.trailLen ?? 15;
+    let trailDecay = mouseOpts.trailDecay ?? 10;
+    let trailDuration = mouseOpts.trailDuration ?? 2000;
+    let mouseRadius = mouseOpts.radius ?? 0.08;
+    let mouseBrightness = mouseOpts.brightness ?? 2.0;
+    const clickEnabled = !!clickEffect;
+    const clickOpts = typeof clickEffect === 'object' ? clickEffect : {};
+    let clickBrightness = clickOpts.brightness ?? 1.1;
+    let clickSpeed = clickOpts.speed ?? 2;
 
     // prop checks
     fontSize = Math.max(7, Math.min(35, fontSize));
@@ -148,9 +160,9 @@ function AsciiVideoWebGL({
         const coloredFlagLoc = gl.getUniformLocation(program, "u_coloredFlag");
         gl.uniform1i(coloredFlagLoc, colored ? 1 : 0);
         const mouseEffectFlagLoc = gl.getUniformLocation(program, "u_mouseEffect");
-        gl.uniform1i(mouseEffectFlagLoc, mouseEffect ? 1 : 0);
+        gl.uniform1i(mouseEffectFlagLoc, mouseEnabled ? 1 : 0);
         const clickEffectFlagLoc = gl.getUniformLocation(program, "u_clickEffect");
-        gl.uniform1i(clickEffectFlagLoc, clickEffect ? 1 : 0);
+        gl.uniform1i(clickEffectFlagLoc, clickEnabled ? 1 : 0);
 
         // set effects
         const revealProgressLoc = gl.getUniformLocation(program, "u_revealProgress");
@@ -183,7 +195,7 @@ function AsciiVideoWebGL({
                 trail.shift();
             }
         };
-        if (mouseEffect) {
+        if (mouseEnabled) {
             canvas.addEventListener("mousemove", onMouseMove);
         }
 
@@ -196,7 +208,7 @@ function AsciiVideoWebGL({
                 ripples.shift();
             }
         };
-        if (clickEffect) {
+        if (clickEnabled) {
             canvas.addEventListener("click", onClick);
         }
 
@@ -294,7 +306,7 @@ function AsciiVideoWebGL({
                 lastTime = video.currentTime;
             }
 
-            if (mouseEffect) {
+            if (mouseEnabled) {
                 const now = performance.now();
                 const positions = new Float32Array(trailLen * 2);
                 const lifeFracs = new Float32Array(trailLen);
@@ -310,7 +322,7 @@ function AsciiVideoWebGL({
                 gl.uniform1fv(mouseLifeFracsLoc, lifeFracs);
             }
 
-            if (clickEffect) {
+            if (clickEnabled) {
                 const now = performance.now();
                 const maxDist = Math.hypot(canvas.width, canvas.height); // disc grows past the canvas before brightness reaches 1.0
                 const ripplePositions = new Float32Array(MAX_RIPPLES * 2);
@@ -442,10 +454,10 @@ function AsciiVideoWebGL({
             if (isMultiSource) {
                 video.removeEventListener("ended", onEnded);
             }
-            if (mouseEffect) {
+            if (mouseEnabled) {
                 canvas.removeEventListener("mousemove", onMouseMove);
             }
-            if (clickEffect) {
+            if (clickEnabled) {
                 canvas.removeEventListener("click", onClick);
             }
 
@@ -467,13 +479,13 @@ function AsciiVideoWebGL({
         sources,
         isMultiSource,
         colored,
-        mouseEffect,
+        mouseEnabled,
         trailLen,
         trailDecay,
         trailDuration,
         mouseRadius,
         mouseBrightness,
-        clickEffect,
+        clickEnabled,
         clickBrightness,
         clickSpeed,
     ])
