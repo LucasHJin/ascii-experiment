@@ -3,9 +3,10 @@ import { createProgram, createShader } from "../lib/webgl-utils";
 import { computeShapeVectors } from "../lib/ascii-utils";
 import vertSrc from '../shaders/vertex.glsl';
 import fragSrc from '../shaders/fragment.glsl';
+import pass1FragSrc from '../shaders/fragment_pass1.glsl';
 
 // CHANGE CHARS TO FIT BOTH SHAPE AND LUMINANCE
-const DEFAULT_CHARS = " .`-~:;=+|/\\i1()rczsnouxvmtfAPB0W#@$";
+const DEFAULT_CHARS = " .'`^\",:;~-_+=*!?/\\|()[]{}<>iIl1tTfLjJrRsSzZcCvVnNmMwWxXyY0OoQq9&%#@$";
 
 interface MouseEffectOptions {
     trailLen?: number;
@@ -43,7 +44,7 @@ interface Props {
 
 function AsciiVideoWebGL({
         src,
-        fontSize = 25,
+        fontSize = 50,
         colored = true,
         brightness = 1.4,
         saturation = 1.8,
@@ -235,10 +236,36 @@ function AsciiVideoWebGL({
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        const charVectorsLoc = gl.getUniformLocation(program, "u_charVectors");
-        gl.uniform1i(charVectorsLoc, 2);
 
-        // uniform locations
+        // pass1 -> compute best vector once per cell (writes char index per cell to frame buffer)
+        const pass1FragShader = createShader(gl, gl.FRAGMENT_SHADER, pass1FragSrc);
+        if (!pass1FragShader) return;
+        const pass1Program = createProgram(gl, vertShader, pass1FragShader);
+        if (!pass1Program) return;
+        gl.useProgram(pass1Program);
+        gl.uniform1i(gl.getUniformLocation(pass1Program, "u_texture"), 0);
+        gl.uniform1i(gl.getUniformLocation(pass1Program, "u_charVectors"), 2);
+        const p1ResLoc      = gl.getUniformLocation(pass1Program, "u_resolution");
+        const p1CellsizeLoc = gl.getUniformLocation(pass1Program, "u_cellsize");
+        const p1CircleNLoc  = gl.getUniformLocation(pass1Program, "u_circleN");
+        const p1NumCharsLoc = gl.getUniformLocation(pass1Program, "u_numCharsInt");
+        const p1ExponentLoc = gl.getUniformLocation(pass1Program, "u_shapeExponent");
+
+        // FBO texture (each byte stores one character index)
+        const fboTexture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(gl.TEXTURE_2D, fboTexture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        const fbo = gl.createFramebuffer();
+
+        // pass2 uniform locations
+        gl.useProgram(program);
+        gl.uniform1i(gl.getUniformLocation(program, "u_fboTexture"), 3);
+        
+        // effects
         const revealEffectFlagLoc = gl.getUniformLocation(program, "u_revealEffectFlag");
         const coloredFlagLoc = gl.getUniformLocation(program, "u_coloredFlag");
         const mouseEffectFlagLoc = gl.getUniformLocation(program, "u_mouseEffect");
@@ -258,11 +285,7 @@ function AsciiVideoWebGL({
         const resLoc = gl.getUniformLocation(program, "u_resolution");
         const sizeLoc = gl.getUniformLocation(program, "u_cellsize");
         const numLoc = gl.getUniformLocation(program, "u_numChars");
-        const numCharsIntLoc = gl.getUniformLocation(program, "u_numCharsInt");
-        const shapeExponentLoc = gl.getUniformLocation(program, "u_shapeExponent");
-        const circleNLoc = gl.getUniformLocation(program, "u_circleN");
         const gridSizeLoc = gl.getUniformLocation(program, "u_gridSize");
-
         gl.uniform1i(shapeMatchingLoc, charMode === 'shape' ? 1 : 0);
         gl.uniform1i(revealEffectFlagLoc, revealEffectFlag);
         gl.uniform1f(revealProgressLoc, 0.0);
@@ -304,17 +327,23 @@ function AsciiVideoWebGL({
                 gl.activeTexture(gl.TEXTURE2);
                 gl.bindTexture(gl.TEXTURE_2D, charVectorsTexture);
                 gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, numChars, 2, 0, gl.RGBA, gl.FLOAT, charVectorData);
-                gl.uniform1i(numCharsIntLoc, numChars);
-                gl.uniform1f(shapeExponentLoc, 2.0);
-                // scale sampling density with font size -> more samples for bigger fonts
-                // FAILS RIGHT NOW -> DOES IT PER PIXEL NOT PER CELL
-                let circleN;
-                if (fs <= 25) {
-                    circleN = 1;
-                } else {
-                    circleN = 2;
-                } 
-                gl.uniform1i(circleNLoc, circleN);
+
+                // size FBO texture to match grid dimensions (or resize)
+                gl.activeTexture(gl.TEXTURE3);
+                gl.bindTexture(gl.TEXTURE_2D, fboTexture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, gridCols, gridRows, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, null);
+                gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTexture, 0);
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+                // scale sampling density with font size
+                const circleN = Math.max(1, Math.round(charW / 5));
+                gl.useProgram(pass1Program);
+                gl.uniform2f(p1CellsizeLoc, charW, charH);
+                gl.uniform1i(p1CircleNLoc, circleN);
+                gl.uniform1i(p1NumCharsLoc, numChars);
+                gl.uniform1f(p1ExponentLoc, 2.0);
+                gl.useProgram(program);
             }
 
             gl.uniform2f(gridSizeLoc, gridCols, gridRows);
@@ -427,6 +456,16 @@ function AsciiVideoWebGL({
                 gl.uniform1fv(rippleBrightnessesLoc, rippleBrightnesses);
             }
 
+            if (charMode === 'shape') {
+                // 2 pass -> switch between the two fragment shaders each frame
+                gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+                gl.viewport(0, 0, gridCols, gridRows);
+                gl.useProgram(pass1Program);
+                gl.drawArrays(gl.TRIANGLES, 0, 6);
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                gl.viewport(0, 0, canvas.width, canvas.height);
+                gl.useProgram(program);
+            }
             gl.drawArrays(gl.TRIANGLES, 0, 6);
             animFrameId = requestAnimationFrame(loop);
         };
@@ -436,6 +475,9 @@ function AsciiVideoWebGL({
             canvas.height = video.videoHeight;
             gl.viewport(0, 0, canvas.width, canvas.height);
             gl.uniform2f(resLoc, canvas.width, canvas.height);
+            gl.useProgram(pass1Program);
+            gl.uniform2f(p1ResLoc, canvas.width, canvas.height);
+            gl.useProgram(program);
 
             setupGrid(fontSizeRef.current);
 
@@ -477,10 +519,14 @@ function AsciiVideoWebGL({
 
             gl.deleteTexture(texture);
             gl.deleteTexture(charVectorsTexture);
+            gl.deleteFramebuffer(fbo);
+            gl.deleteTexture(fboTexture);
             gl.deleteBuffer(buffer);
             gl.deleteShader(vertShader);
             gl.deleteShader(fragShader);
+            gl.deleteShader(pass1FragShader);
             gl.deleteProgram(program);
+            gl.deleteProgram(pass1Program);
             gl.deleteTexture(atlasTextureRef.current);
         };
     }, [sources, isMultiSource, charMode, chars, revealEffectFlag, revealDuration, revealEnabled]);
