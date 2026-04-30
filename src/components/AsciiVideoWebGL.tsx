@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useMemo } from "react";
 import { createProgram, createShader } from "../lib/webgl-utils";
-import { computeShapeVectors, SIMPLE_CIRCLES } from "../lib/ascii-utils";
+import { computeShapeVectors } from "../lib/ascii-utils";
 import vertSrc from '../shaders/vertex.glsl';
 import fragSrc from '../shaders/fragment.glsl';
 
-const DEFAULT_CHARS = " .'`^\",:;~-_+=*!?/\\|()[]{}<>iIl1tTfLjJrRsSzZcCvVnNmMwWxXyY0OoQq9&%#@$";
+// CHANGE CHARS TO FIT BOTH SHAPE AND LUMINANCE
+const DEFAULT_CHARS = " .`-~:;=+|/\\i1()rczsnouxvmtfAPB0W#@$";
 
 interface MouseEffectOptions {
     trailLen?: number;
@@ -42,7 +43,7 @@ interface Props {
 
 function AsciiVideoWebGL({
         src,
-        fontSize = 12,
+        fontSize = 25,
         colored = true,
         brightness = 1.4,
         saturation = 1.8,
@@ -51,7 +52,7 @@ function AsciiVideoWebGL({
         chars = DEFAULT_CHARS,
         mouseEffect = true,
         clickEffect = true,
-        charMode = 'luminance',
+        charMode = 'shape',
         fit = 'width',
         className,
     }: Props) {
@@ -160,15 +161,9 @@ function AsciiVideoWebGL({
     useEffect(() => {
         loadedRef.current = false;
 
-        let sampleCtx: CanvasRenderingContext2D | null = null;
-        let charGridData: Uint8Array | null = null;
-        let charGridTexture: WebGLTexture | null = null;
         let shapeData: { char: string, vector: number[] }[] = [];
         let gridCols = 0;
         let gridRows = 0;
-        const cache = new Map<number, number>(); // cache vectors for faster lookups
-        const SAMPLE_HEIGHT = 3;
-        const SAMPLE_WIDTH = 2;
         const MAX_RIPPLES = 10;
         const trail: { x: number, y: number, t: number }[] = [];
         const ripples: { x: number, y: number, t: number }[] = [];
@@ -220,7 +215,7 @@ function AsciiVideoWebGL({
         const texLoc = gl.getUniformLocation(program, "u_texture");
         gl.uniform1i(texLoc, 0);
 
-        // atlas texture (data uploaded in setupGrid)
+        // atlas texture 
         const atlasTexture = gl.createTexture();
         atlasTextureRef.current = atlasTexture;
         gl.activeTexture(gl.TEXTURE1);
@@ -232,16 +227,16 @@ function AsciiVideoWebGL({
         const atlasLoc = gl.getUniformLocation(program, "u_atlas");
         gl.uniform1i(atlasLoc, 1);
 
-        // charGrid texture (data allocated in setupGrid)
-        charGridTexture = gl.createTexture();
+        // charVectors texture -> one time texture of vectors for each character
+        const charVectorsTexture = gl.createTexture();
         gl.activeTexture(gl.TEXTURE2);
-        gl.bindTexture(gl.TEXTURE_2D, charGridTexture);
+        gl.bindTexture(gl.TEXTURE_2D, charVectorsTexture);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        const charGridLoc = gl.getUniformLocation(program, "u_charGrid");
-        gl.uniform1i(charGridLoc, 2);
+        const charVectorsLoc = gl.getUniformLocation(program, "u_charVectors");
+        gl.uniform1i(charVectorsLoc, 2);
 
         // uniform locations
         const revealEffectFlagLoc = gl.getUniformLocation(program, "u_revealEffectFlag");
@@ -263,6 +258,9 @@ function AsciiVideoWebGL({
         const resLoc = gl.getUniformLocation(program, "u_resolution");
         const sizeLoc = gl.getUniformLocation(program, "u_cellsize");
         const numLoc = gl.getUniformLocation(program, "u_numChars");
+        const numCharsIntLoc = gl.getUniformLocation(program, "u_numCharsInt");
+        const shapeExponentLoc = gl.getUniformLocation(program, "u_shapeExponent");
+        const circleNLoc = gl.getUniformLocation(program, "u_circleN");
         const gridSizeLoc = gl.getUniformLocation(program, "u_gridSize");
 
         gl.uniform1i(shapeMatchingLoc, charMode === 'shape' ? 1 : 0);
@@ -283,23 +281,42 @@ function AsciiVideoWebGL({
             const charW = Math.ceil(hiddenCtx.measureText('M').width);
             const charH = fs;
 
-            if (charMode === 'shape') {
-                shapeData = computeShapeVectors(chars, charW, charH);
-            }
             gridCols = Math.floor(canvas.width / charW);
             gridRows = Math.floor(canvas.height / charH);
 
             if (charMode === 'shape') {
-                charGridData = new Uint8Array(gridCols * gridRows);
-                const sampleCanvas = document.createElement('canvas');
-                sampleCanvas.width = gridCols * SAMPLE_WIDTH;
-                sampleCanvas.height = gridRows * SAMPLE_HEIGHT;
-                sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+                shapeData = computeShapeVectors(chars, charW, charH);
+
+                // need 2 rows -> can only store 4 floats per char
+                // row 0: components [v0,v1,v2,v3], row 1: components [v4,v5,_,_]
+                const numChars = shapeData.length;
+                const charVectorData = new Float32Array(numChars * 8);
+                for (let i = 0; i < numChars; i++) {
+                    const v = shapeData[i].vector;
+                    charVectorData[i * 4 + 0] = v[0];
+                    charVectorData[i * 4 + 1] = v[1];
+                    charVectorData[i * 4 + 2] = v[2];
+                    charVectorData[i * 4 + 3] = v[3];
+                    // row 2
+                    charVectorData[numChars * 4 + i * 4 + 0] = v[4];
+                    charVectorData[numChars * 4 + i * 4 + 1] = v[5];
+                }
+                gl.activeTexture(gl.TEXTURE2);
+                gl.bindTexture(gl.TEXTURE_2D, charVectorsTexture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, numChars, 2, 0, gl.RGBA, gl.FLOAT, charVectorData);
+                gl.uniform1i(numCharsIntLoc, numChars);
+                gl.uniform1f(shapeExponentLoc, 2.0);
+                // scale sampling density with font size -> more samples for bigger fonts
+                // FAILS RIGHT NOW -> DOES IT PER PIXEL NOT PER CELL
+                let circleN;
+                if (fs <= 25) {
+                    circleN = 1;
+                } else {
+                    circleN = 2;
+                } 
+                gl.uniform1i(circleNLoc, circleN);
             }
 
-            gl.activeTexture(gl.TEXTURE2);
-            gl.bindTexture(gl.TEXTURE_2D, charGridTexture);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, gridCols, gridRows, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, null);
             gl.uniform2f(gridSizeLoc, gridCols, gridRows);
 
             hiddenCanvas.width = chars.length * charW;
@@ -317,8 +334,6 @@ function AsciiVideoWebGL({
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hiddenCanvas);
             gl.uniform1f(numLoc, chars.length);
             gl.uniform2f(sizeLoc, charW, charH);
-
-            cache.clear();
         };
 
         // attach function to ref -> can call outside of useEffect without rerender
@@ -367,77 +382,6 @@ function AsciiVideoWebGL({
             }
 
             if (video.currentTime != lastTime && video.readyState >= 2) {
-                if (sampleCtx && charGridData) {
-                    sampleCtx.drawImage(video, 0, 0, sampleCtx.canvas.width, sampleCtx.canvas.height);
-                    const imageData = sampleCtx.getImageData(0, 0, sampleCtx.canvas.width, sampleCtx.canvas.height);
-                    const sw = sampleCtx.canvas.width;
-
-                    for (let row = 0; row < gridRows; row++) {
-                        for (let col = 0; col < gridCols; col++) {
-                            const samplingVector: number[] = [];
-                            const cellX = col * SAMPLE_WIDTH;
-                            const cellY = row * SAMPLE_HEIGHT;
-
-                            for (const [dx, dy] of SIMPLE_CIRCLES) {
-                                const i = ((cellY + dy) * sw + (cellX + dx)) * 4;
-                                const r = imageData.data[i] / 255;
-                                const g = imageData.data[i + 1] / 255;
-                                const b = imageData.data[i + 2] / 255;
-                                samplingVector.push(0.299 * r + 0.587 * g + 0.114 * b);
-                            }
-
-                            let maxVal = 0;
-                            for (let d = 0; d < 6; d++) {
-                                if (samplingVector[d] > maxVal) {
-                                    maxVal = samplingVector[d];
-                                }
-                            }
-                            if (maxVal > 0) {
-                                const EXPONENT = 2;
-                                for (let d = 0; d < 6; d++) {
-                                    const norm = samplingVector[d] / maxVal;
-                                    samplingVector[d] = Math.pow(norm, EXPONENT) * maxVal;
-                                }
-                            }
-
-                            const RANGE = 6;
-                            let key = 0;
-                            for (let d = 0; d < RANGE; d++) {
-                                const q = Math.min(RANGE - 1, Math.floor(samplingVector[d] * RANGE));
-                                key = key * RANGE + q;
-                            }
-
-                            let charIndex: number;
-                            if (cache.has(key)) {
-                                charIndex = cache.get(key)!;
-                            } else {
-                                let bestIndex = 0;
-                                let bestDist = Infinity;
-                                for (let i = 0; i < shapeData.length; i++) {
-                                    let dist = 0;
-                                    for (let d = 0; d < 6; d++) {
-                                        const diff = samplingVector[d] - shapeData[i].vector[d];
-                                        dist += diff * diff;
-                                    }
-                                    if (dist < bestDist) {
-                                        bestDist = dist;
-                                        bestIndex = i;
-                                    }
-                                }
-                                charIndex = bestIndex;
-                                cache.set(key, charIndex);
-                            }
-
-                            const gridIndex = row * gridCols + col;
-                            charGridData[gridIndex] = charIndex;
-                        }
-                    }
-
-                    gl.activeTexture(gl.TEXTURE2);
-                    gl.bindTexture(gl.TEXTURE_2D, charGridTexture!);
-                    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gridCols, gridRows, gl.RED_INTEGER, gl.UNSIGNED_BYTE, charGridData);
-                }
-
                 gl.activeTexture(gl.TEXTURE0);
                 gl.bindTexture(gl.TEXTURE_2D, texture);
                 gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, video);
@@ -532,7 +476,7 @@ function AsciiVideoWebGL({
             canvas.removeEventListener("click", onClick);
 
             gl.deleteTexture(texture);
-            gl.deleteTexture(charGridTexture);
+            gl.deleteTexture(charVectorsTexture);
             gl.deleteBuffer(buffer);
             gl.deleteShader(vertShader);
             gl.deleteShader(fragShader);
