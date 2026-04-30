@@ -6,7 +6,7 @@ import fragSrc from '../shaders/fragment.glsl';
 import pass1FragSrc from '../shaders/fragment_pass1.glsl';
 
 // CHANGE CHARS TO FIT BOTH SHAPE AND LUMINANCE
-const DEFAULT_CHARS = " .'`^\",:;~-_+=*!?/\\|()[]{}<>iIl1tTfLjJrRsSzZcCvVnNmMwWxXyY0OoQq9&%#@$";
+const DEFAULT_CHARS = " `.',-_:!;|\"~+^lr[](\\/L)>t<v=Tz?icf1{sIxY*jJno}CZyVwmSXRqM$O%#9&NW0Q@";
 
 interface MouseEffectOptions {
     trailLen?: number;
@@ -44,7 +44,7 @@ interface Props {
 
 function AsciiVideoWebGL({
         src,
-        fontSize = 50,
+        fontSize = 20,
         colored = true,
         brightness = 1.4,
         saturation = 1.8,
