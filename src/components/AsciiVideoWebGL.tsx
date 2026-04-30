@@ -516,6 +516,9 @@ function AsciiVideoWebGL({
         if (isMultiSource) {
             video.addEventListener("ended", onEnded);
         }
+        if (video.readyState >= 2) {
+            onLoaded(); // call onloaded again if its the reveal effect that changed (no freeze)
+        }
 
         return () => {
             setupGridRef.current = null;
