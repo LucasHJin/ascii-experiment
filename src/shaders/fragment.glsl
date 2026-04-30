@@ -38,6 +38,13 @@ uniform vec2 u_gridSize;
 
 out vec4 fragColor;
 
+// hash function to simulate randomness
+float hash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031); // mix up axes to avoid symmetry
+    p3 += dot(p3, p3.yzx + 33.33); // nonlienar mixing + avoid smaller number collapse
+    return fract((p3.x + p3.y) * p3.z); // final fract to be between 0 and 1
+}
+g
 void main() {
     vec2 fragCoord = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y); // flip y coords
     vec2 cellCoord = floor(fragCoord / u_cellsize);
@@ -52,6 +59,12 @@ void main() {
     } else if (u_revealEffectFlag == 2) {
         float dist = length(cellCoord / u_gridSize - vec2(0.5));
         float revealThreshold = dist / 0.7071; // sqrt of 0.5
+        if (revealThreshold > u_revealProgress) {
+            fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+        }
+    } else if (u_revealEffectFlag == 3) {
+        float revealThreshold = hash(cellCoord);
         if (revealThreshold > u_revealProgress) {
             fragColor = vec4(0.0, 0.0, 0.0, 1.0);
             return;

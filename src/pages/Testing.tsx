@@ -38,7 +38,7 @@ function Testing() {
     const [colored, setColored] = useState(true);
 
     const [revealEnabled, setRevealEnabled] = useState(false);
-    const [revealType, setRevealType] = useState<'diagonal' | 'radial'>('diagonal');
+    const [revealType, setRevealType] = useState<'diagonal' | 'radial' | 'random'>('diagonal');
     const [revealDuration, setRevealDuration] = useState(0.4);
 
     const [mouseEnabled, setMouseEnabled] = useState(true);
@@ -102,6 +102,10 @@ function Testing() {
                         <label style={{ cursor: 'pointer' }}>
                             <input type="radio" name="revealType" value="radial" checked={revealType === 'radial'} onChange={() => setRevealType('radial')} style={{ marginRight: 4 }} />
                             radial
+                        </label>
+                        <label style={{ cursor: 'pointer' }}>
+                            <input type="radio" name="revealType" value="random" checked={revealType === 'random'} onChange={() => setRevealType('random')} style={{ marginRight: 4 }} />
+                            random
                         </label>
                     </div>
                     <Slider name="duration" value={revealDuration} min={0.1} max={4} step={0.1} onChange={setRevealDuration} />

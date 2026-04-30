@@ -22,7 +22,7 @@ interface ClickEffectOptions {
 }
 
 interface RevealEffectOptions {
-    type?: 'diagonal' | 'radial';
+    type?: 'diagonal' | 'radial' | 'random';
     duration?: number;
 }
 
@@ -77,7 +77,7 @@ function AsciiVideoWebGL({
 
     const revealEnabled = !!revealEffect;
     const revealOpts = typeof revealEffect === 'object' ? revealEffect : {};
-    const revealType = revealOpts.type ?? 'diagonal';
+    const revealType = revealOpts.type ?? 'random';
     let revealDuration = revealOpts.duration ?? 0.4;
 
     // prop checks
@@ -94,7 +94,16 @@ function AsciiVideoWebGL({
     clickBrightness = Math.max(1.05, Math.min(2.0, clickBrightness));
     clickSpeed = Math.max(0.5, Math.min(4.0, clickSpeed));
 
-    const revealEffectFlag = !revealEnabled ? 0 : revealType === 'radial' ? 2 : 1;
+    let revealEffectFlag;
+    if (!revealEnabled) {
+        revealEffectFlag = 0;
+    } else if (revealType === 'diagonal') {
+        revealEffectFlag = 1;
+    } else if (revealType === 'radial') {
+        revealEffectFlag = 2;
+    } else {
+        revealEffectFlag = 3;
+    }
 
     const sources = useMemo(() => Array.isArray(src) ? src : [src], [src]);
     const isMultiSource = sources.length > 1;
