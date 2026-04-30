@@ -28,7 +28,7 @@ interface RevealEffectOptions {
 
 interface Props {
     src: string | string[]; // when calling, can't use inline array directly (or else if state rerenders, it will create a new array)
-    fontSize?: number;
+    numCols?: number;
     colored?: boolean;
     brightness?: number;
     saturation?: number;
@@ -44,7 +44,7 @@ interface Props {
 
 function AsciiVideoWebGL({
         src,
-        fontSize = 20,
+        numCols = 250,
         colored = true,
         brightness = 1.4,
         saturation = 1.8,
@@ -81,7 +81,7 @@ function AsciiVideoWebGL({
     let revealDuration = revealOpts.duration ?? 0.4;
 
     // prop checks
-    fontSize = Math.max(7, Math.min(50, fontSize));
+    numCols = Math.max(60, Math.min(350, Math.round(numCols)));
     brightness = Math.max(0.0, Math.min(2.0, brightness));
     saturation = Math.max(0.0, Math.min(3.0, saturation));
     bgOpacity = Math.max(0.0, Math.min(1.0, bgOpacity));
@@ -113,10 +113,9 @@ function AsciiVideoWebGL({
     const clickEnabledRef = useRef(clickEnabled);
     const clickBrightnessRef = useRef(clickBrightness);
     const clickSpeedRef = useRef(clickSpeed);
-    const fontSizeRef = useRef(fontSize);
+    const numColsRef = useRef(numCols);
     // update refs inside useEffect (not in render) -> avoids unintentional errors
     useEffect(() => {
-        brightnessRef.current = brightness;
         brightnessRef.current = brightness;
         saturationRef.current = saturation;
         bgOpacityRef.current = bgOpacity;
@@ -130,7 +129,7 @@ function AsciiVideoWebGL({
         clickEnabledRef.current = clickEnabled;
         clickBrightnessRef.current = clickBrightness;
         clickSpeedRef.current = clickSpeed;
-        fontSizeRef.current = fontSize;
+        numColsRef.current = numCols;
     }, [
         brightness,
         saturation,
@@ -145,19 +144,18 @@ function AsciiVideoWebGL({
         clickEnabled,
         clickBrightness,
         clickSpeed,
-        fontSize,
+        numCols,
     ]);
 
-    // font size refs
-    const setupGridRef = useRef<((fs: number) => void) | null>(null);
+    const setupGridRef = useRef<((nc: number) => void) | null>(null);
     const loadedRef = useRef(false);
 
-    // fontSize change -> refresh atlas/grid textures without full GL reinit
+    // numCols change -> refresh atlas/grid textures without full GL reinit
     useEffect(() => {
         if (loadedRef.current) {
-            setupGridRef.current?.(fontSize);
+            setupGridRef.current?.(numCols);
         }
-    }, [fontSize]);
+    }, [numCols]);
 
     useEffect(() => {
         loadedRef.current = false;
@@ -295,14 +293,17 @@ function AsciiVideoWebGL({
         let startTime = -1;
         let currentVidIndex = 0;
 
-        // sets up new character grid based on font size
-        const setupGrid = (fs: number) => {
+        // sets up new character grid based on column count
+        const setupGrid = (nc: number) => {
             const hiddenCanvas = document.createElement('canvas');
             const hiddenCtx = hiddenCanvas.getContext('2d')!;
 
-            hiddenCtx.font = `${fs}px monospace`;
-            const charW = Math.ceil(hiddenCtx.measureText('M').width);
-            const charH = fs;
+            const charW = Math.max(1, Math.floor(canvas.width / nc)); // num pixels per char (width)
+            // probe and scale to find charH
+            const probe = charW * 2;
+            hiddenCtx.font = `${probe}px monospace`;
+            // try a font size of double width, find actually how wide it is, use this as scale factor
+            const charH = Math.max(1, Math.round(probe * charW / hiddenCtx.measureText('M').width));
 
             gridCols = Math.floor(canvas.width / charW);
             gridRows = Math.floor(canvas.height / charH);
@@ -479,7 +480,7 @@ function AsciiVideoWebGL({
             gl.uniform2f(p1ResLoc, canvas.width, canvas.height);
             gl.useProgram(program);
 
-            setupGrid(fontSizeRef.current);
+            setupGrid(numColsRef.current);
 
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, texture);

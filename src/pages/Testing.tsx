@@ -31,7 +31,7 @@ function Check({ name, checked, onChange }: { name: string; checked: boolean; on
 }
 
 function Testing() {
-    const [fontSize, setFontSize] = useState(12);
+    const [numCols, setNumCols] = useState(80);
     const [brightness, setBrightness] = useState(1.4);
     const [saturation, setSaturation] = useState(1.8);
     const [bgOpacity, setBgOpacity] = useState(0.3);
@@ -61,7 +61,7 @@ function Testing() {
             <div style={{ flex: 1, minWidth: 0 }}>
                 <AsciiVideoWebGL
                     src="/m3.mp4"
-                    fontSize={fontSize}
+                    numCols={numCols}
                     brightness={brightness}
                     saturation={saturation}
                     bgOpacity={bgOpacity}
@@ -84,7 +84,7 @@ function Testing() {
                 borderLeft: '1px solid #333',
             }}>
                 <div style={sectionStyle}>GENERAL</div>
-                <Slider name="fontSize" value={fontSize} min={7} max={35} step={1} onChange={setFontSize} />
+                <Slider name="numCols" value={numCols} min={20} max={200} step={1} onChange={setNumCols} />
                 <Slider name="brightness" value={brightness} min={0} max={2} step={0.01} onChange={setBrightness} />
                 <Slider name="saturation" value={saturation} min={0} max={3} step={0.01} onChange={setSaturation} />
                 <Slider name="bgOpacity" value={bgOpacity} min={0} max={1} step={0.01} onChange={setBgOpacity} />
