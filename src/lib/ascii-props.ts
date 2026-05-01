@@ -1,4 +1,3 @@
-// CHANGE CHARS TO FIT BOTH SHAPE AND LUMINANCE
 export const DEFAULT_CHARS = " `.',-_:!;|\"~+^lr[](\\/L)>t<v=Tz?icf1{sIxY*jJno}CZyVwmSXRqM$O%#9&NW0Q@";
 
 export interface MouseEffectOptions {
