@@ -5,8 +5,8 @@ function Home() {
   return (
     <div style={{ width: '100vw', height: '100vh'}}>
         <AsciiVideoWebGL 
-          src={'/m3.mp4'} 
-          revealEffect
+          src={'/test.mp4'} 
+          mouseEffect={{ style: 'scatter', lifetime: 0.8 }}
         /> 
     </div>
   )

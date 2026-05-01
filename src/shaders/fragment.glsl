@@ -26,6 +26,11 @@ uniform vec2 u_ripplePositions[MAX_RIPPLES];
 uniform float u_rippleRadii[MAX_RIPPLES]; // current disc radius in pixels
 uniform float u_rippleBrightnesses[MAX_RIPPLES]; // applied brightness per ripple
 
+uniform bool u_scatterEffect;
+uniform usampler2D u_scatterStateTexture; // gridCols x gridRows, R8UI: 0=inactive, otherwise (charIdx + 1)
+uniform sampler2D u_scatterAtlas;          // wide atlas of u_scatterNumChars glyphs
+uniform float u_scatterNumChars;
+
 uniform bool u_shapeMatching;
 
 uniform sampler2D u_texture;
@@ -95,40 +100,59 @@ void main() {
     float atlasV = withinCellPos.y;
     float glyphMask = texture(u_atlas, vec2(atlasU, atlasV)).r; // only need r to tell if there is white or black
 
-    vec3 finalColor;
     vec3 bgColor = cellColor * u_bgOpacity;
-    finalColor = mix(bgColor, cellColor, glyphMask);
 
-    if (u_mouseEffect) {
-        bool inside = false;
-        for (int i = 0; i < MOUSE_TRAIL_LEN; i++) {
-            if (u_mouseLifeFracs[i] <= 0.0) {
-                continue;
-            }
-            float r = u_mouseRadius * u_mouseLifeFracs[i];
-            if (distance(cellCenter, u_mousePositions[i]) < r) { // use cellCenter so it snaps to whole cells
-                inside = true;
-                break;
-            }
-        }
-        if (inside) {
-            finalColor = clamp(finalColor * u_mouseBrightness, 0.0, 1.0); // increase brightness
+    bool scatterHit = false;
+    vec3 scatterColor = vec3(0.0); // initially black
+    // get the color for pixel if affected by scatter effect
+    if (u_scatterEffect) {
+        uint state = texelFetch(u_scatterStateTexture, ivec2(cellCoord), 0).r; 
+        if (state > 0u) {
+            int idx = int(state) - 1;
+            float su = (float(idx) + withinCellPos.x) / u_scatterNumChars;
+            float mask = texture(u_scatterAtlas, vec2(su, withinCellPos.y)).r;
+            scatterColor = mix(bgColor, vec3(1.0), mask);
+            scatterHit = true;
         }
     }
 
-    if (u_clickEffect) {
-        // Find total brightness multiplier
-        float boost = 1.0;
-        for (int i = 0; i < MAX_RIPPLES; i++) {
-            if (u_rippleBrightnesses[i] <= 1.0) {
-                continue; // needs to increase brightness (else ignored)
+    vec3 finalColor;
+    if (scatterHit) {
+        finalColor = scatterColor;
+    } else {
+        // no scatter effect
+        finalColor = mix(bgColor, cellColor, glyphMask);
+
+        if (u_mouseEffect) {
+            bool inside = false;
+            for (int i = 0; i < MOUSE_TRAIL_LEN; i++) {
+                if (u_mouseLifeFracs[i] <= 0.0) {
+                    continue;
+                }
+                float r = u_mouseRadius * u_mouseLifeFracs[i];
+                if (distance(cellCenter, u_mousePositions[i]) < r) {
+                    inside = true;
+                    break;
+                }
             }
-            if (distance(cellCenter, u_ripplePositions[i]) < u_rippleRadii[i]) {
-                boost *= u_rippleBrightnesses[i]; // overlapping discs stack
+            if (inside) {
+                finalColor = clamp(finalColor * u_mouseBrightness, 0.0, 1.0);
             }
         }
-        if (boost > 1.0) {
-            finalColor = clamp(finalColor * boost, 0.0, 1.0);
+
+        if (u_clickEffect) {
+            float boost = 1.0;
+            for (int i = 0; i < MAX_RIPPLES; i++) {
+                if (u_rippleBrightnesses[i] <= 1.0) {
+                    continue;
+                }
+                if (distance(cellCenter, u_ripplePositions[i]) < u_rippleRadii[i]) {
+                    boost *= u_rippleBrightnesses[i];
+                }
+            }
+            if (boost > 1.0) {
+                finalColor = clamp(finalColor * boost, 0.0, 1.0);
+            }
         }
     }
 

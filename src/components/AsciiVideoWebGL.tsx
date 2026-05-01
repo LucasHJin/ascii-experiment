@@ -9,10 +9,12 @@ import pass1FragSrc from '../shaders/fragment_pass1.glsl';
 const DEFAULT_CHARS = " `.',-_:!;|\"~+^lr[](\\/L)>t<v=Tz?icf1{sIxY*jJno}CZyVwmSXRqM$O%#9&NW0Q@";
 
 interface MouseEffectOptions {
+    style?: 'brighten' | 'scatter';
+    radius?: number;
+    duration?: number;
+    // brighten-only:
     trailLen?: number;
     trailDecay?: number;
-    trailDuration?: number;
-    radius?: number;
     brightness?: number;
 }
 
@@ -60,14 +62,18 @@ function AsciiVideoWebGL({
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const atlasTextureRef = useRef<WebGLTexture | null>(null);
+    const scatterAtlasTextureRef = useRef<WebGLTexture | null>(null);
 
-    // destructure mouse and click effect (simpler top level api)
+    // destructure effects
     const mouseEnabled = !!mouseEffect;
     const mouseOpts = typeof mouseEffect === 'object' ? mouseEffect : {};
+    const mouseStyle: 'brighten' | 'scatter' = mouseOpts.style ?? 'brighten';
+    const brightenEnabled = mouseEnabled && mouseStyle !== 'scatter';
+    const scatterEnabled = mouseEnabled && mouseStyle === 'scatter';
     let trailLen = mouseOpts.trailLen ?? 15;
     let trailDecay = mouseOpts.trailDecay ?? 10;
-    let trailDuration = mouseOpts.trailDuration ?? 2;
-    let mouseRadius = mouseOpts.radius ?? 0.08;
+    let duration = mouseOpts.duration ?? 1.0;
+    let mouseRadius = mouseOpts.radius ?? (mouseStyle === 'scatter' ? 0.05 : 0.08);
     let mouseBrightness = mouseOpts.brightness ?? 2.0;
 
     const clickEnabled = !!clickEffect;
@@ -88,7 +94,7 @@ function AsciiVideoWebGL({
     revealDuration = Math.max(0.1, Math.min(4, revealDuration));
     trailLen = Math.max(0, Math.min(30, Math.round(trailLen)));
     trailDecay = Math.max(1, Math.min(15, trailDecay));
-    trailDuration = Math.max(0.1, Math.min(4, trailDuration));
+    duration = Math.max(0.1, Math.min(4, duration));
     mouseRadius = Math.max(0.03, Math.min(0.2, mouseRadius));
     mouseBrightness = Math.max(0.2, Math.min(5.0, mouseBrightness));
     clickBrightness = Math.max(1.05, Math.min(2.0, clickBrightness));
@@ -114,11 +120,14 @@ function AsciiVideoWebGL({
     const bgOpacityRef = useRef(bgOpacity);
     const coloredRef = useRef(colored);
     const mouseEnabledRef = useRef(mouseEnabled);
+    const mouseStyleRef = useRef(mouseStyle);
+    const brightenEnabledRef = useRef(brightenEnabled);
+    const scatterEnabledRef = useRef(scatterEnabled);
     const mouseBrightnessRef = useRef(mouseBrightness);
     const mouseRadiusRef = useRef(mouseRadius);
     const trailLenRef = useRef(trailLen);
     const trailDecayRef = useRef(trailDecay);
-    const trailDurationRef = useRef(trailDuration);
+    const durationRef = useRef(duration);
     const clickEnabledRef = useRef(clickEnabled);
     const clickBrightnessRef = useRef(clickBrightness);
     const clickSpeedRef = useRef(clickSpeed);
@@ -130,11 +139,14 @@ function AsciiVideoWebGL({
         bgOpacityRef.current = bgOpacity;
         coloredRef.current = colored;
         mouseEnabledRef.current = mouseEnabled;
+        mouseStyleRef.current = mouseStyle;
+        brightenEnabledRef.current = brightenEnabled;
+        scatterEnabledRef.current = scatterEnabled;
         mouseBrightnessRef.current = mouseBrightness;
         mouseRadiusRef.current = mouseRadius;
         trailLenRef.current = trailLen;
         trailDecayRef.current = trailDecay;
-        trailDurationRef.current = trailDuration;
+        durationRef.current = duration;
         clickEnabledRef.current = clickEnabled;
         clickBrightnessRef.current = clickBrightness;
         clickSpeedRef.current = clickSpeed;
@@ -145,11 +157,14 @@ function AsciiVideoWebGL({
         bgOpacity,
         colored,
         mouseEnabled,
+        mouseStyle,
+        brightenEnabled,
+        scatterEnabled,
         mouseBrightness,
         mouseRadius,
         trailLen,
         trailDecay,
-        trailDuration,
+        duration,
         clickEnabled,
         clickBrightness,
         clickSpeed,
@@ -172,9 +187,24 @@ function AsciiVideoWebGL({
         let shapeData: { char: string, vector: number[] }[] = [];
         let gridCols = 0;
         let gridRows = 0;
+        let charW = 1;
+        let charH = 1;
         const MAX_RIPPLES = 10;
+        const SCATTER_CHARS = '->o'; // CHANGE TO USER INPUT
         const trail: { x: number, y: number, t: number }[] = [];
         const ripples: { x: number, y: number, t: number }[] = [];
+
+        // scatter effect setup (size in setupGrid)
+        let cellChar = new Uint8Array(0); // for each cell -> 0 for inactive, else 1-indexed character from SCATTER_CHARS
+        let cellLife = new Float32Array(0); 
+        let cellSpeed = new Float32Array(0); // per-cell decay speed multiplier
+        let cellTouched = new Uint8Array(0); 
+        let cursor: { x: number, y: number, t: number } | null = null; // where cursor is currently
+        let cursorPrev: { x: number, y: number, t: number } | null = null;
+        let smoothVx = 0;
+        let smoothVy = 0;
+        let lastFrameMs = -1;
+        const pickCharIdx = (): number => Math.floor(Math.random() * SCATTER_CHARS.length); // pick random scatter char
 
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -268,9 +298,30 @@ function AsciiVideoWebGL({
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         const fbo = gl.createFramebuffer();
 
+        // scatter atlas texture
+        const scatterAtlasTexture = gl.createTexture();
+        scatterAtlasTextureRef.current = scatterAtlasTexture;
+        gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D, scatterAtlasTexture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+        // scatter state texture (based on cellChar) 
+        const scatterStateTexture = gl.createTexture();
+        gl.activeTexture(gl.TEXTURE5);
+        gl.bindTexture(gl.TEXTURE_2D, scatterStateTexture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
         // pass2 uniform locations
         gl.useProgram(program);
         gl.uniform1i(gl.getUniformLocation(program, "u_fboTexture"), 3);
+        gl.uniform1i(gl.getUniformLocation(program, "u_scatterAtlas"), 4);
+        gl.uniform1i(gl.getUniformLocation(program, "u_scatterStateTexture"), 5);
         
         // effects
         const revealEffectFlagLoc = gl.getUniformLocation(program, "u_revealEffectFlag");
@@ -289,6 +340,8 @@ function AsciiVideoWebGL({
         const ripplePositionsLoc = gl.getUniformLocation(program, "u_ripplePositions");
         const rippleRadiiLoc = gl.getUniformLocation(program, "u_rippleRadii");
         const rippleBrightnessesLoc = gl.getUniformLocation(program, "u_rippleBrightnesses");
+        const scatterEffectFlagLoc = gl.getUniformLocation(program, "u_scatterEffect");
+        const scatterNumCharsLoc = gl.getUniformLocation(program, "u_scatterNumChars");
         const resLoc = gl.getUniformLocation(program, "u_resolution");
         const sizeLoc = gl.getUniformLocation(program, "u_cellsize");
         const numLoc = gl.getUniformLocation(program, "u_numChars");
@@ -307,15 +360,29 @@ function AsciiVideoWebGL({
             const hiddenCanvas = document.createElement('canvas');
             const hiddenCtx = hiddenCanvas.getContext('2d')!;
 
-            const charW = Math.max(1, Math.floor(canvas.width / nc)); // num pixels per char (width)
+            charW = Math.max(1, Math.floor(canvas.width / nc)); // num pixels per char (width)
             // probe and scale to find charH
             const probe = charW * 2;
             hiddenCtx.font = `${probe}px monospace`;
             // try a font size of double width, find actually how wide it is, use this as scale factor
-            const charH = Math.max(1, Math.round(probe * charW / hiddenCtx.measureText('M').width));
+            charH = Math.max(1, Math.round(probe * charW / hiddenCtx.measureText('M').width));
 
             gridCols = Math.floor(canvas.width / charW);
             gridRows = Math.floor(canvas.height / charH);
+
+            // resize for scatter effect
+            const cellCount = gridCols * gridRows;
+            cellChar = new Uint8Array(cellCount);
+            cellLife = new Float32Array(cellCount);
+            cellSpeed = new Float32Array(cellCount);
+            cellTouched = new Uint8Array(cellCount);
+            cursor = null;
+            cursorPrev = null;
+            smoothVx = 0;
+            smoothVy = 0;
+            gl.activeTexture(gl.TEXTURE5);
+            gl.bindTexture(gl.TEXTURE_2D, scatterStateTexture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, gridCols, gridRows, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, cellChar);
 
             if (charMode === 'shape') {
                 shapeData = computeShapeVectors(chars, charW, charH);
@@ -373,6 +440,22 @@ function AsciiVideoWebGL({
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hiddenCanvas);
             gl.uniform1f(numLoc, chars.length);
             gl.uniform2f(sizeLoc, charW, charH);
+
+            // draw scatter atlas texture
+            hiddenCanvas.width = SCATTER_CHARS.length * charW;
+            hiddenCanvas.height = charH;
+            hiddenCtx.fillStyle = 'black';
+            hiddenCtx.fillRect(0, 0, SCATTER_CHARS.length * charW, charH);
+            hiddenCtx.fillStyle = 'white';
+            hiddenCtx.textBaseline = 'top';
+            hiddenCtx.font = `${charH}px monospace`;
+            for (let c = 0; c < SCATTER_CHARS.length; c++) {
+                hiddenCtx.fillText(SCATTER_CHARS[c], c * charW, 0);
+            }
+            gl.activeTexture(gl.TEXTURE4);
+            gl.bindTexture(gl.TEXTURE_2D, scatterAtlasTextureRef.current);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hiddenCanvas);
+            gl.uniform1f(scatterNumCharsLoc, SCATTER_CHARS.length);
         };
 
         // attach function to ref -> can call outside of useEffect without rerender
@@ -383,12 +466,31 @@ function AsciiVideoWebGL({
             const rect = canvas.getBoundingClientRect();
             const x = (e.clientX - rect.left) * (canvas.width / rect.width);
             const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-            trail.push({ x, y, t: performance.now() });
-            if (trail.length > trailLenRef.current) {
-                trail.shift();
+            const t = performance.now();
+
+            if (brightenEnabledRef.current) {
+                trail.push({ x, y, t });
+                if (trail.length > trailLenRef.current) {
+                    trail.shift();
+                }
+                return;
+            }
+
+            if (scatterEnabledRef.current) {
+                cursorPrev = cursor;
+                cursor = { x, y, t };
             }
         };
         canvas.addEventListener("mousemove", onMouseMove);
+
+        const onMouseLeave = () => {
+            // stop activating new cells (rest erodes)
+            cursor = null;
+            cursorPrev = null;
+            smoothVx = 0;
+            smoothVy = 0;
+        };
+        canvas.addEventListener("mouseleave", onMouseLeave);
 
         const onClick = (e: MouseEvent) => {
             if (!clickEnabledRef.current) {
@@ -410,7 +512,8 @@ function AsciiVideoWebGL({
             gl.uniform1f(brightnessLoc, brightnessRef.current);
             gl.uniform1f(saturationLoc, saturationRef.current);
             gl.uniform1f(bgOpacityLoc, bgOpacityRef.current);
-            gl.uniform1i(mouseEffectFlagLoc, mouseEnabledRef.current ? 1 : 0);
+            gl.uniform1i(mouseEffectFlagLoc, brightenEnabledRef.current ? 1 : 0);
+            gl.uniform1i(scatterEffectFlagLoc, scatterEnabledRef.current ? 1 : 0);
             gl.uniform1i(clickEffectFlagLoc, clickEnabledRef.current ? 1 : 0);
             gl.uniform1f(mouseBrightnessLoc, mouseBrightnessRef.current);
             gl.uniform1f(mouseRadiusLoc, Math.min(canvas.width, canvas.height) * mouseRadiusRef.current);
@@ -427,13 +530,13 @@ function AsciiVideoWebGL({
                 lastTime = video.currentTime;
             }
 
-            if (mouseEnabledRef.current) {
+            if (brightenEnabledRef.current) {
                 const now = performance.now();
                 const positions = new Float32Array(trailLenRef.current * 2);
                 const lifeFracs = new Float32Array(trailLenRef.current);
                 for (let i = 0; i < trail.length; i++) {
                     const age = now - trail[i].t;
-                    const linearLife = Math.max(0, 1 - age / (trailDurationRef.current * 1000));
+                    const linearLife = Math.max(0, 1 - age / (durationRef.current * 1000));
                     const lifeFrac = linearLife ** trailDecayRef.current;
                     positions[i * 2] = trail[i].x;
                     positions[i * 2 + 1] = trail[i].y;
@@ -441,6 +544,97 @@ function AsciiVideoWebGL({
                 }
                 gl.uniform2fv(mousePositionsLoc, positions);
                 gl.uniform1fv(mouseLifeFracsLoc, lifeFracs);
+            }
+
+            if (scatterEnabledRef.current && gridCols > 0 && gridRows > 0) {
+                const now = performance.now();
+                const dtSec = lastFrameMs < 0 ? 0 : Math.min(0.1, (now - lastFrameMs) / 1000); // time since last frame
+                lastFrameMs = now;
+                const radiusPx = Math.min(canvas.width, canvas.height) * mouseRadiusRef.current;
+
+                // movement gate -> if no movement then erode cursor circle 
+                let cursorActive = false;
+                if (cursor && now - cursor.t < 80) { // cursor moved in last 80ms
+                    if (cursorPrev) {
+                        const eventDt = (cursor.t - cursorPrev.t) / 1000;
+                        // compute smooth velocity
+                        if (eventDt > 0 && eventDt < 0.2) {
+                            const vx = (cursor.x - cursorPrev.x) / eventDt;
+                            const vy = (cursor.y - cursorPrev.y) / eventDt;
+                            smoothVx = smoothVx * 0.7 + vx * 0.3;
+                            smoothVy = smoothVy * 0.7 + vy * 0.3;
+                        }
+                    } else {
+                        smoothVx = 0;
+                        smoothVy = 0;
+                    }
+                    // needs to move fast enough
+                    if (Math.hypot(smoothVx, smoothVy) > charW * 2) {
+                        cursorActive = true;
+                    }
+                } else {
+                    smoothVx *= 0.6;
+                    smoothVy *= 0.6;
+                }
+
+                // activate cells (no erosion for these cells)
+                cellTouched.fill(0);
+                if (cursorActive && cursor && radiusPx > 0) {
+                    const cx = cursor.x;
+                    const cy = cursor.y;
+                    // bound checking area for performance
+                    const minCol = Math.max(0, Math.floor((cx - radiusPx) / charW));
+                    const maxCol = Math.min(gridCols - 1, Math.floor((cx + radiusPx) / charW));
+                    const minRow = Math.max(0, Math.floor((cy - radiusPx) / charH));
+                    const maxRow = Math.min(gridRows - 1, Math.floor((cy + radiusPx) / charH));
+                    for (let row = minRow; row <= maxRow; row++) {
+                        for (let col = minCol; col <= maxCol; col++) {
+                            const cellCx = (col + 0.5) * charW;
+                            const cellCy = (row + 0.5) * charH;
+                            const dd = Math.hypot(cellCx - cx, cellCy - cy);
+                            if (dd > radiusPx) {
+                                continue;
+                            }
+
+                            const k = row * gridCols + col;
+                            cellTouched[k] = 1;
+                            // spawn if new
+                            if (cellChar[k] === 0) {
+                                cellChar[k] = 1 + pickCharIdx();
+                                cellSpeed[k] = 0.5 + Math.random() * 2.0;
+                            }
+                            cellLife[k] = 1.0; // keep at full life
+                        }
+                    }
+                }
+
+                // edge-first erosion
+                const lifetimeSec = durationRef.current;
+                if (dtSec > 0) {
+                    for (let row = 0; row < gridRows; row++) {
+                        for (let col = 0; col < gridCols; col++) {
+                            const k = row * gridCols + col;
+                            // skip inactive/just touched cells
+                            if (cellChar[k] === 0 || cellTouched[k]) {
+                                continue;
+                            }
+                            const left  = col > 0 ? cellChar[k - 1] !== 0 : false;
+                            const right = col < gridCols-1 ? cellChar[k + 1] !== 0 : false;
+                            const up    = row > 0 ? cellChar[k - gridCols] !== 0 : false;
+                            const down  = row < gridRows-1 ? cellChar[k + gridCols] !== 0 : false;
+                            const isEdge = !left || !right || !up || !down; // if it isn't surrounded on all 4 sides
+                            const rate = (isEdge ? 5.0 : 1.0) * cellSpeed[k] / lifetimeSec; // 5 times faster decay rate
+                            cellLife[k] -= rate * dtSec;
+                            if (cellLife[k] <= 0) {
+                                cellChar[k] = 0;
+                            }
+                        }
+                    }
+                }
+
+                gl.activeTexture(gl.TEXTURE5);
+                gl.bindTexture(gl.TEXTURE_2D, scatterStateTexture);
+                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gridCols, gridRows, gl.RED_INTEGER, gl.UNSIGNED_BYTE, cellChar);
             }
 
             if (clickEnabledRef.current) {
@@ -525,6 +719,7 @@ function AsciiVideoWebGL({
                 video.removeEventListener("ended", onEnded);
             }
             canvas.removeEventListener("mousemove", onMouseMove);
+            canvas.removeEventListener("mouseleave", onMouseLeave);
             canvas.removeEventListener("click", onClick);
 
             gl.deleteTexture(texture);
@@ -538,6 +733,8 @@ function AsciiVideoWebGL({
             gl.deleteProgram(program);
             gl.deleteProgram(pass1Program);
             gl.deleteTexture(atlasTextureRef.current);
+            gl.deleteTexture(scatterAtlasTextureRef.current);
+            gl.deleteTexture(scatterStateTexture);
         };
     }, [sources, isMultiSource, charMode, chars, revealEffectFlag, revealDuration, revealEnabled]);
 
