@@ -12,10 +12,12 @@ interface MouseEffectOptions {
     style?: 'brighten' | 'scatter';
     radius?: number;
     duration?: number;
-    // brighten-only:
+    // brighten only
     trailLen?: number;
     trailDecay?: number;
     brightness?: number;
+    // scatter only
+    scatterChars?: string;
 }
 
 interface ClickEffectOptions {
@@ -70,6 +72,7 @@ function AsciiVideoWebGL({
     const mouseStyle: 'brighten' | 'scatter' = mouseOpts.style ?? 'brighten';
     const brightenEnabled = mouseEnabled && mouseStyle !== 'scatter';
     const scatterEnabled = mouseEnabled && mouseStyle === 'scatter';
+    const scatterChars = mouseOpts.scatterChars ?? '->o';
     let trailLen = mouseOpts.trailLen ?? 15;
     let trailDecay = mouseOpts.trailDecay ?? 10;
     let duration = mouseOpts.duration ?? 1.0;
@@ -128,6 +131,7 @@ function AsciiVideoWebGL({
     const trailLenRef = useRef(trailLen);
     const trailDecayRef = useRef(trailDecay);
     const durationRef = useRef(duration);
+    const scatterCharsRef = useRef(scatterChars);
     const clickEnabledRef = useRef(clickEnabled);
     const clickBrightnessRef = useRef(clickBrightness);
     const clickSpeedRef = useRef(clickSpeed);
@@ -147,6 +151,7 @@ function AsciiVideoWebGL({
         trailLenRef.current = trailLen;
         trailDecayRef.current = trailDecay;
         durationRef.current = duration;
+        scatterCharsRef.current = scatterChars;
         clickEnabledRef.current = clickEnabled;
         clickBrightnessRef.current = clickBrightness;
         clickSpeedRef.current = clickSpeed;
@@ -165,6 +170,7 @@ function AsciiVideoWebGL({
         trailLen,
         trailDecay,
         duration,
+        scatterChars,
         clickEnabled,
         clickBrightness,
         clickSpeed,
@@ -190,12 +196,11 @@ function AsciiVideoWebGL({
         let charW = 1;
         let charH = 1;
         const MAX_RIPPLES = 10;
-        const SCATTER_CHARS = '->o'; // CHANGE TO USER INPUT
         const trail: { x: number, y: number, t: number }[] = [];
         const ripples: { x: number, y: number, t: number }[] = [];
 
         // scatter effect setup (size in setupGrid)
-        let cellChar = new Uint8Array(0); // for each cell -> 0 for inactive, else 1-indexed character from SCATTER_CHARS
+        let cellChar = new Uint8Array(0); // for each cell -> 0 for inactive, else 1-indexed character from scatterChars
         let cellLife = new Float32Array(0); 
         let cellSpeed = new Float32Array(0); // per-cell decay speed multiplier
         let cellTouched = new Uint8Array(0); 
@@ -204,7 +209,7 @@ function AsciiVideoWebGL({
         let smoothVx = 0;
         let smoothVy = 0;
         let lastFrameMs = -1;
-        const pickCharIdx = (): number => Math.floor(Math.random() * SCATTER_CHARS.length); // pick random scatter char
+        const pickCharIdx = (): number => Math.floor(Math.random() * scatterCharsRef.current.length); // pick random scatter char
 
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -442,20 +447,21 @@ function AsciiVideoWebGL({
             gl.uniform2f(sizeLoc, charW, charH);
 
             // draw scatter atlas texture
-            hiddenCanvas.width = SCATTER_CHARS.length * charW;
+            const sc = scatterCharsRef.current;
+            hiddenCanvas.width = sc.length * charW;
             hiddenCanvas.height = charH;
             hiddenCtx.fillStyle = 'black';
-            hiddenCtx.fillRect(0, 0, SCATTER_CHARS.length * charW, charH);
+            hiddenCtx.fillRect(0, 0, sc.length * charW, charH);
             hiddenCtx.fillStyle = 'white';
             hiddenCtx.textBaseline = 'top';
             hiddenCtx.font = `${charH}px monospace`;
-            for (let c = 0; c < SCATTER_CHARS.length; c++) {
-                hiddenCtx.fillText(SCATTER_CHARS[c], c * charW, 0);
+            for (let c = 0; c < sc.length; c++) {
+                hiddenCtx.fillText(sc[c], c * charW, 0);
             }
             gl.activeTexture(gl.TEXTURE4);
             gl.bindTexture(gl.TEXTURE_2D, scatterAtlasTextureRef.current);
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hiddenCanvas);
-            gl.uniform1f(scatterNumCharsLoc, SCATTER_CHARS.length);
+            gl.uniform1f(scatterNumCharsLoc, sc.length);
         };
 
         // attach function to ref -> can call outside of useEffect without rerender
