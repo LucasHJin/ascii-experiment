@@ -32,6 +32,7 @@ interface RevealEffectOptions {
 
 interface Props {
     src: string | string[]; // when calling, can't use inline array directly (or else if state rerenders, it will create a new array)
+    videoMode?: boolean;
     numCols?: number;
     colored?: boolean;
     brightness?: number;
@@ -48,6 +49,7 @@ interface Props {
 
 function AsciiVideoWebGL({
         src,
+        videoMode = false,
         numCols = 250,
         colored = true,
         brightness = 1.4,
@@ -136,6 +138,7 @@ function AsciiVideoWebGL({
     const clickBrightnessRef = useRef(clickBrightness);
     const clickSpeedRef = useRef(clickSpeed);
     const numColsRef = useRef(numCols);
+    const videoModeRef = useRef(videoMode);
     // update refs inside useEffect (not in render) -> avoids unintentional errors
     useEffect(() => {
         brightnessRef.current = brightness;
@@ -156,6 +159,7 @@ function AsciiVideoWebGL({
         clickBrightnessRef.current = clickBrightness;
         clickSpeedRef.current = clickSpeed;
         numColsRef.current = numCols;
+        videoModeRef.current = videoMode;
     }, [
         brightness,
         saturation,
@@ -175,6 +179,7 @@ function AsciiVideoWebGL({
         clickBrightness,
         clickSpeed,
         numCols,
+        videoMode,
     ]);
 
     const setupGridRef = useRef<((nc: number) => void) | null>(null);
@@ -347,6 +352,7 @@ function AsciiVideoWebGL({
         const rippleBrightnessesLoc = gl.getUniformLocation(program, "u_rippleBrightnesses");
         const scatterEffectFlagLoc = gl.getUniformLocation(program, "u_scatterEffect");
         const scatterNumCharsLoc = gl.getUniformLocation(program, "u_scatterNumChars");
+        const videoModeLoc = gl.getUniformLocation(program, "u_videoMode");
         const resLoc = gl.getUniformLocation(program, "u_resolution");
         const sizeLoc = gl.getUniformLocation(program, "u_cellsize");
         const numLoc = gl.getUniformLocation(program, "u_numChars");
@@ -515,6 +521,7 @@ function AsciiVideoWebGL({
         const loop = () => {
             // update dynamic uniforms per frame
             gl.uniform1i(coloredFlagLoc, coloredRef.current ? 1 : 0);
+            gl.uniform1i(videoModeLoc, videoModeRef.current ? 1 : 0);
             gl.uniform1f(brightnessLoc, brightnessRef.current);
             gl.uniform1f(saturationLoc, saturationRef.current);
             gl.uniform1f(bgOpacityLoc, bgOpacityRef.current);

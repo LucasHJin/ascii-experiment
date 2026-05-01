@@ -6,6 +6,7 @@ precision highp usampler2D;
 // flags
 uniform int u_revealEffectFlag;
 uniform bool u_coloredFlag;
+uniform bool u_videoMode;
 
 // effects
 uniform float u_revealProgress;
@@ -77,9 +78,10 @@ void main() {
     }
 
     vec2 cellCenter = (cellCoord + 0.5) * u_cellsize; // figure out center pixel of cell
-    vec2 uv = cellCenter / u_resolution; // normalize to 0-1
+    // sample per pixel vs per cell center (video vs ascii)
+    vec2 sampleUV = u_videoMode ? (fragCoord / u_resolution) : (cellCenter / u_resolution);
 
-    vec3 cellColor = texture(u_texture, uv).rgb;
+    vec3 cellColor = texture(u_texture, sampleUV).rgb;
     float luminosity = dot(cellColor, vec3(0.299, 0.587, 0.114)); // luminance of pixel
     if (u_coloredFlag) {
         cellColor = clamp(mix(vec3(luminosity), cellColor, u_saturation), 0.0, 1.0); // increase saturation (clamped)
@@ -88,30 +90,35 @@ void main() {
     }
     cellColor = pow(cellColor, vec3(2.0 - u_brightness)); // boost brightness
 
-    uint charInd;
-    if (u_shapeMatching) {
-        charInd = texelFetch(u_fboTexture, ivec2(cellCoord), 0).r; // fetch from the u_fboTexture instead of computing
-    } else {
-        charInd = uint(floor(luminosity * (u_numChars - 1.0)));
-    }
+    vec2 withinCellPos = fract(fragCoord / u_cellsize);
 
-    vec2 withinCellPos = fract(fragCoord / u_cellsize); // need this to determine how a single pixel of atlas maps over (within a character)
-    float atlasU = (float(charInd) + withinCellPos.x) / u_numChars;
-    float atlasV = withinCellPos.y;
-    float glyphMask = texture(u_atlas, vec2(atlasU, atlasV)).r; // only need r to tell if there is white or black
+    // ascii char lookup 
+    float glyphMask = 0.0;
+    if (!u_videoMode) {
+        uint charInd;
+        if (u_shapeMatching) {
+            charInd = texelFetch(u_fboTexture, ivec2(cellCoord), 0).r;
+        } else {
+            charInd = uint(floor(luminosity * (u_numChars - 1.0)));
+        }
+        float atlasU = (float(charInd) + withinCellPos.x) / u_numChars;
+        float atlasV = withinCellPos.y;
+        glyphMask = texture(u_atlas, vec2(atlasU, atlasV)).r;
+    }
 
     vec3 bgColor = cellColor * u_bgOpacity;
 
     bool scatterHit = false;
-    vec3 scatterColor = vec3(0.0); // initially black
-    // get the color for pixel if affected by scatter effect
+    vec3 scatterColor = vec3(0.0);
     if (u_scatterEffect) {
-        uint state = texelFetch(u_scatterStateTexture, ivec2(cellCoord), 0).r; 
+        uint state = texelFetch(u_scatterStateTexture, ivec2(cellCoord), 0).r;
         if (state > 0u) {
             int idx = int(state) - 1;
             float su = (float(idx) + withinCellPos.x) / u_scatterNumChars;
             float mask = texture(u_scatterAtlas, vec2(su, withinCellPos.y)).r;
-            scatterColor = mix(bgColor, vec3(1.0), mask);
+            // video mode -> scatter chars composites over video pixel 
+            vec3 scatterBg = u_videoMode ? cellColor : bgColor;
+            scatterColor = mix(scatterBg, vec3(1.0), mask);
             scatterHit = true;
         }
     }
@@ -120,8 +127,7 @@ void main() {
     if (scatterHit) {
         finalColor = scatterColor;
     } else {
-        // no scatter effect
-        finalColor = mix(bgColor, cellColor, glyphMask);
+        finalColor = u_videoMode ? cellColor : mix(bgColor, cellColor, glyphMask);
 
         if (u_mouseEffect) {
             bool inside = false;
