@@ -44,7 +44,7 @@ float hash(vec2 p) {
     p3 += dot(p3, p3.yzx + 33.33); // nonlienar mixing + avoid smaller number collapse
     return fract((p3.x + p3.y) * p3.z); // final fract to be between 0 and 1
 }
-g
+
 void main() {
     vec2 fragCoord = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y); // flip y coords
     vec2 cellCoord = floor(fragCoord / u_cellsize);
