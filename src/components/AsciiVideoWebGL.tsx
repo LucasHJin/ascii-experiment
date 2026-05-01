@@ -1,60 +1,20 @@
-import React, { useRef, useEffect, useMemo } from "react";
-import { createProgram, createShader } from "../lib/webgl-utils";
+import React, { useRef, useEffect } from "react";
 import { computeShapeVectors } from "../lib/ascii-utils";
-import vertSrc from '../shaders/vertex.glsl';
-import fragSrc from '../shaders/fragment.glsl';
-import pass1FragSrc from '../shaders/fragment_pass1.glsl';
-
-// CHANGE CHARS TO FIT BOTH SHAPE AND LUMINANCE
-const DEFAULT_CHARS = " `.',-_:!;|\"~+^lr[](\\/L)>t<v=Tz?icf1{sIxY*jJno}CZyVwmSXRqM$O%#9&NW0Q@";
-
-interface MouseEffectOptions {
-    style?: 'brighten' | 'scatter';
-    radius?: number;
-    duration?: number;
-    // brighten only
-    trailLen?: number;
-    trailDecay?: number;
-    brightness?: number;
-    // scatter only
-    scatterChars?: string;
-}
-
-interface ClickEffectOptions {
-    brightness?: number;
-    speed?: number;
-}
-
-interface RevealEffectOptions {
-    type?: 'diagonal' | 'radial' | 'random';
-    duration?: number;
-}
-
-interface Props {
-    src: string | string[]; // when calling, can't use inline array directly (or else if state rerenders, it will create a new array)
-    videoMode?: boolean;
-    numCols?: number;
-    colored?: boolean;
-    brightness?: number;
-    saturation?: number;
-    bgOpacity?: number;
-    revealEffect?: boolean | RevealEffectOptions;
-    chars?: string;
-    mouseEffect?: boolean | MouseEffectOptions;
-    clickEffect?: boolean | ClickEffectOptions;
-    charMode?: 'shape' | 'luminance';
-    fit?: 'width' | 'height';
-    className?: string;
-}
+import { DEFAULT_CHARS, parseProps } from "../lib/ascii-props";
+import type { Props } from "../lib/ascii-props";
+import { createGLResources } from "../lib/create-gl-resources";
+import { createScatterEffect } from "../lib/scatter-effect";
+import { createMouseTrail } from "../lib/brighten-effect";
+import { createClickEffect } from "../lib/click-effect";
 
 function AsciiVideoWebGL({
         src,
         videoMode = false,
-        numCols = 250,
+        numColsRaw = 250,
         colored = true,
-        brightness = 1.4,
-        saturation = 1.8,
-        bgOpacity = 0.3,
+        brightnessRaw = 1.4,
+        saturationRaw = 1.8,
+        bgOpacityRaw = 0.3,
         revealEffect = false,
         chars = DEFAULT_CHARS,
         mouseEffect = true,
@@ -68,56 +28,12 @@ function AsciiVideoWebGL({
     const atlasTextureRef = useRef<WebGLTexture | null>(null);
     const scatterAtlasTextureRef = useRef<WebGLTexture | null>(null);
 
-    // destructure effects
-    const mouseEnabled = !!mouseEffect;
-    const mouseOpts = typeof mouseEffect === 'object' ? mouseEffect : {};
-    const mouseStyle: 'brighten' | 'scatter' = mouseOpts.style ?? 'brighten';
-    const brightenEnabled = mouseEnabled && mouseStyle !== 'scatter';
-    const scatterEnabled = mouseEnabled && mouseStyle === 'scatter';
-    const scatterChars = mouseOpts.scatterChars ?? '->o';
-    let trailLen = mouseOpts.trailLen ?? 15;
-    let trailDecay = mouseOpts.trailDecay ?? 10;
-    let duration = mouseOpts.duration ?? 1.0;
-    let mouseRadius = mouseOpts.radius ?? (mouseStyle === 'scatter' ? 0.05 : 0.08);
-    let mouseBrightness = mouseOpts.brightness ?? 2.0;
-
-    const clickEnabled = !!clickEffect;
-    const clickOpts = typeof clickEffect === 'object' ? clickEffect : {};
-    let clickBrightness = clickOpts.brightness ?? 1.1;
-    let clickSpeed = clickOpts.speed ?? 2;
-
-    const revealEnabled = !!revealEffect;
-    const revealOpts = typeof revealEffect === 'object' ? revealEffect : {};
-    const revealType = revealOpts.type ?? 'random';
-    let revealDuration = revealOpts.duration ?? 0.4;
-
-    // prop checks
-    numCols = Math.max(60, Math.min(350, Math.round(numCols)));
-    brightness = Math.max(0.0, Math.min(2.0, brightness));
-    saturation = Math.max(0.0, Math.min(3.0, saturation));
-    bgOpacity = Math.max(0.0, Math.min(1.0, bgOpacity));
-    revealDuration = Math.max(0.1, Math.min(4, revealDuration));
-    trailLen = Math.max(0, Math.min(30, Math.round(trailLen)));
-    trailDecay = Math.max(1, Math.min(15, trailDecay));
-    duration = Math.max(0.1, Math.min(4, duration));
-    mouseRadius = Math.max(0.03, Math.min(0.2, mouseRadius));
-    mouseBrightness = Math.max(0.2, Math.min(5.0, mouseBrightness));
-    clickBrightness = Math.max(1.05, Math.min(2.0, clickBrightness));
-    clickSpeed = Math.max(0.5, Math.min(4.0, clickSpeed));
-
-    let revealEffectFlag;
-    if (!revealEnabled) {
-        revealEffectFlag = 0;
-    } else if (revealType === 'diagonal') {
-        revealEffectFlag = 1;
-    } else if (revealType === 'radial') {
-        revealEffectFlag = 2;
-    } else {
-        revealEffectFlag = 3;
-    }
-
-    const sources = useMemo(() => Array.isArray(src) ? src : [src], [src]);
-    const isMultiSource = sources.length > 1;
+    const { numCols, brightness, saturation, bgOpacity,
+            mouseEnabled, mouseStyle, brightenEnabled, scatterEnabled,
+            scatterChars, trailLen, trailDecay, duration, mouseRadius, mouseBrightness,
+            clickEnabled, clickBrightness, clickSpeed,
+            revealEnabled, revealDuration, revealEffectFlag,
+    } = parseProps(numColsRaw, brightnessRaw, saturationRaw, bgOpacityRaw, mouseEffect, clickEffect, revealEffect);
 
     // refs for props that update dynamically without full GL reinit
     const brightnessRef = useRef(brightness);
@@ -200,21 +116,6 @@ function AsciiVideoWebGL({
         let gridRows = 0;
         let charW = 1;
         let charH = 1;
-        const MAX_RIPPLES = 10;
-        const trail: { x: number, y: number, t: number }[] = [];
-        const ripples: { x: number, y: number, t: number }[] = [];
-
-        // scatter effect setup (size in setupGrid)
-        let cellChar = new Uint8Array(0); // for each cell -> 0 for inactive, else 1-indexed character from scatterChars
-        let cellLife = new Float32Array(0); 
-        let cellSpeed = new Float32Array(0); // per-cell decay speed multiplier
-        let cellTouched = new Uint8Array(0); 
-        let cursor: { x: number, y: number, t: number } | null = null; // where cursor is currently
-        let cursorPrev: { x: number, y: number, t: number } | null = null;
-        let smoothVx = 0;
-        let smoothVy = 0;
-        let lastFrameMs = -1;
-        const pickCharIdx = (): number => Math.floor(Math.random() * scatterCharsRef.current.length); // pick random scatter char
 
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -227,144 +128,30 @@ function AsciiVideoWebGL({
 
         gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
 
-        const vertShader = createShader(gl, gl.VERTEX_SHADER, vertSrc);
-        const fragShader = createShader(gl, gl.FRAGMENT_SHADER, fragSrc);
-        if (!vertShader || !fragShader) return;
+        // all gl textures, uniform locations, etc. in resources
+        const resources = createGLResources(gl);
+        if (!resources) return;
 
-        const program = createProgram(gl, vertShader, fragShader);
-        if (!program) return;
+        const { program, pass1Program } = resources;
+        atlasTextureRef.current = resources.atlasTexture;
+        scatterAtlasTextureRef.current = resources.scatterAtlasTexture;
 
-        const data = new Float32Array([
-            1.0, 1.0,
-            -1.0, 1.0,
-            1.0, -1.0,
-            -1.0, -1.0,
-            -1.0, 1.0,
-            1.0, -1.0,
-        ]);
-        const buffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+        gl.uniform1i(resources.shapeMatchingLoc, charMode === 'shape' ? 1 : 0);
+        gl.uniform1i(resources.revealEffectFlagLoc, revealEffectFlag);
+        gl.uniform1f(resources.revealProgressLoc, 0.0);
 
-        const posLoc = gl.getAttribLocation(program, "a_position");
-        gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-        gl.enableVertexAttribArray(posLoc);
-
-        gl.useProgram(program);
-
-        // video texture
-        const texture = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        const texLoc = gl.getUniformLocation(program, "u_texture");
-        gl.uniform1i(texLoc, 0);
-
-        // atlas texture 
-        const atlasTexture = gl.createTexture();
-        atlasTextureRef.current = atlasTexture;
-        gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D, atlasTexture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        const atlasLoc = gl.getUniformLocation(program, "u_atlas");
-        gl.uniform1i(atlasLoc, 1);
-
-        // charVectors texture -> one time texture of vectors for each character
-        const charVectorsTexture = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE2);
-        gl.bindTexture(gl.TEXTURE_2D, charVectorsTexture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
-        // pass1 -> compute best vector once per cell (writes char index per cell to frame buffer)
-        const pass1FragShader = createShader(gl, gl.FRAGMENT_SHADER, pass1FragSrc);
-        if (!pass1FragShader) return;
-        const pass1Program = createProgram(gl, vertShader, pass1FragShader);
-        if (!pass1Program) return;
-        gl.useProgram(pass1Program);
-        gl.uniform1i(gl.getUniformLocation(pass1Program, "u_texture"), 0);
-        gl.uniform1i(gl.getUniformLocation(pass1Program, "u_charVectors"), 2);
-        const p1ResLoc      = gl.getUniformLocation(pass1Program, "u_resolution");
-        const p1CellsizeLoc = gl.getUniformLocation(pass1Program, "u_cellsize");
-        const p1CircleNLoc  = gl.getUniformLocation(pass1Program, "u_circleN");
-        const p1NumCharsLoc = gl.getUniformLocation(pass1Program, "u_numCharsInt");
-        const p1ExponentLoc = gl.getUniformLocation(pass1Program, "u_shapeExponent");
-
-        // FBO texture (each byte stores one character index)
-        const fboTexture = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE3);
-        gl.bindTexture(gl.TEXTURE_2D, fboTexture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        const fbo = gl.createFramebuffer();
-
-        // scatter atlas texture
-        const scatterAtlasTexture = gl.createTexture();
-        scatterAtlasTextureRef.current = scatterAtlasTexture;
-        gl.activeTexture(gl.TEXTURE4);
-        gl.bindTexture(gl.TEXTURE_2D, scatterAtlasTexture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
-        // scatter state texture (based on cellChar) 
-        const scatterStateTexture = gl.createTexture();
-        gl.activeTexture(gl.TEXTURE5);
-        gl.bindTexture(gl.TEXTURE_2D, scatterStateTexture);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
-        // pass2 uniform locations
-        gl.useProgram(program);
-        gl.uniform1i(gl.getUniformLocation(program, "u_fboTexture"), 3);
-        gl.uniform1i(gl.getUniformLocation(program, "u_scatterAtlas"), 4);
-        gl.uniform1i(gl.getUniformLocation(program, "u_scatterStateTexture"), 5);
-        
-        // effects
-        const revealEffectFlagLoc = gl.getUniformLocation(program, "u_revealEffectFlag");
-        const coloredFlagLoc = gl.getUniformLocation(program, "u_coloredFlag");
-        const mouseEffectFlagLoc = gl.getUniformLocation(program, "u_mouseEffect");
-        const clickEffectFlagLoc = gl.getUniformLocation(program, "u_clickEffect");
-        const shapeMatchingLoc = gl.getUniformLocation(program, "u_shapeMatching");
-        const revealProgressLoc = gl.getUniformLocation(program, "u_revealProgress");
-        const brightnessLoc = gl.getUniformLocation(program, "u_brightness");
-        const saturationLoc = gl.getUniformLocation(program, "u_saturation");
-        const bgOpacityLoc = gl.getUniformLocation(program, "u_bgOpacity");
-        const mouseBrightnessLoc = gl.getUniformLocation(program, "u_mouseBrightness");
-        const mousePositionsLoc = gl.getUniformLocation(program, "u_mousePositions");
-        const mouseLifeFracsLoc = gl.getUniformLocation(program, "u_mouseLifeFracs");
-        const mouseRadiusLoc = gl.getUniformLocation(program, "u_mouseRadius");
-        const ripplePositionsLoc = gl.getUniformLocation(program, "u_ripplePositions");
-        const rippleRadiiLoc = gl.getUniformLocation(program, "u_rippleRadii");
-        const rippleBrightnessesLoc = gl.getUniformLocation(program, "u_rippleBrightnesses");
-        const scatterEffectFlagLoc = gl.getUniformLocation(program, "u_scatterEffect");
-        const scatterNumCharsLoc = gl.getUniformLocation(program, "u_scatterNumChars");
-        const videoModeLoc = gl.getUniformLocation(program, "u_videoMode");
-        const resLoc = gl.getUniformLocation(program, "u_resolution");
-        const sizeLoc = gl.getUniformLocation(program, "u_cellsize");
-        const numLoc = gl.getUniformLocation(program, "u_numChars");
-        const gridSizeLoc = gl.getUniformLocation(program, "u_gridSize");
-        gl.uniform1i(shapeMatchingLoc, charMode === 'shape' ? 1 : 0);
-        gl.uniform1i(revealEffectFlagLoc, revealEffectFlag);
-        gl.uniform1f(revealProgressLoc, 0.0);
+        // create effect handlers
+        const scatterEffects = createScatterEffect({ scatterEnabledRef, mouseRadiusRef, durationRef, scatterCharsRef });
+        const trailEffects = createMouseTrail({ brightenEnabledRef, trailLenRef, durationRef, trailDecayRef });
+        const clickEffects = createClickEffect({ clickEnabledRef, clickSpeedRef, clickBrightnessRef });
 
         let animFrameId: number;
         let lastTime = -1;
         let startTime = -1;
         let currentVidIndex = 0;
+
+        const sources = Array.isArray(src) ? src : [src];
+        const isMultiSource = sources.length > 1;
 
         // sets up new character grid based on column count
         const setupGrid = (nc: number) => {
@@ -382,18 +169,7 @@ function AsciiVideoWebGL({
             gridRows = Math.floor(canvas.height / charH);
 
             // resize for scatter effect
-            const cellCount = gridCols * gridRows;
-            cellChar = new Uint8Array(cellCount);
-            cellLife = new Float32Array(cellCount);
-            cellSpeed = new Float32Array(cellCount);
-            cellTouched = new Uint8Array(cellCount);
-            cursor = null;
-            cursorPrev = null;
-            smoothVx = 0;
-            smoothVy = 0;
-            gl.activeTexture(gl.TEXTURE5);
-            gl.bindTexture(gl.TEXTURE_2D, scatterStateTexture);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, gridCols, gridRows, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, cellChar);
+            scatterEffects.setup(gl, gridCols, gridRows, charW, charH, resources.scatterStateTexture);
 
             if (charMode === 'shape') {
                 shapeData = computeShapeVectors(chars, charW, charH);
@@ -413,28 +189,28 @@ function AsciiVideoWebGL({
                     charVectorData[numChars * 4 + i * 4 + 1] = v[5];
                 }
                 gl.activeTexture(gl.TEXTURE2);
-                gl.bindTexture(gl.TEXTURE_2D, charVectorsTexture);
+                gl.bindTexture(gl.TEXTURE_2D, resources.charVectorsTexture);
                 gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, numChars, 2, 0, gl.RGBA, gl.FLOAT, charVectorData);
 
                 // size FBO texture to match grid dimensions (or resize)
                 gl.activeTexture(gl.TEXTURE3);
-                gl.bindTexture(gl.TEXTURE_2D, fboTexture);
+                gl.bindTexture(gl.TEXTURE_2D, resources.fboTexture);
                 gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, gridCols, gridRows, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, null);
-                gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTexture, 0);
+                gl.bindFramebuffer(gl.FRAMEBUFFER, resources.fbo);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, resources.fboTexture, 0);
                 gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
                 // scale sampling density with font size
                 const circleN = Math.max(1, Math.round(charW / 5));
                 gl.useProgram(pass1Program);
-                gl.uniform2f(p1CellsizeLoc, charW, charH);
-                gl.uniform1i(p1CircleNLoc, circleN);
-                gl.uniform1i(p1NumCharsLoc, numChars);
-                gl.uniform1f(p1ExponentLoc, 2.0);
+                gl.uniform2f(resources.p1CellsizeLoc, charW, charH);
+                gl.uniform1i(resources.p1CircleNLoc, circleN);
+                gl.uniform1i(resources.p1NumCharsLoc, numChars);
+                gl.uniform1f(resources.p1ExponentLoc, 2.0);
                 gl.useProgram(program);
             }
 
-            gl.uniform2f(gridSizeLoc, gridCols, gridRows);
+            gl.uniform2f(resources.gridSizeLoc, gridCols, gridRows);
 
             hiddenCanvas.width = chars.length * charW;
             hiddenCanvas.height = charH;
@@ -449,8 +225,8 @@ function AsciiVideoWebGL({
             gl.activeTexture(gl.TEXTURE1);
             gl.bindTexture(gl.TEXTURE_2D, atlasTextureRef.current);
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hiddenCanvas);
-            gl.uniform1f(numLoc, chars.length);
-            gl.uniform2f(sizeLoc, charW, charH);
+            gl.uniform1f(resources.numLoc, chars.length);
+            gl.uniform2f(resources.sizeLoc, charW, charH);
 
             // draw scatter atlas texture
             const sc = scatterCharsRef.current;
@@ -467,7 +243,7 @@ function AsciiVideoWebGL({
             gl.activeTexture(gl.TEXTURE4);
             gl.bindTexture(gl.TEXTURE_2D, scatterAtlasTextureRef.current);
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hiddenCanvas);
-            gl.uniform1f(scatterNumCharsLoc, sc.length);
+            gl.uniform1f(resources.scatterNumCharsLoc, sc.length);
         };
 
         // attach function to ref -> can call outside of useEffect without rerender
@@ -479,203 +255,49 @@ function AsciiVideoWebGL({
             const x = (e.clientX - rect.left) * (canvas.width / rect.width);
             const y = (e.clientY - rect.top) * (canvas.height / rect.height);
             const t = performance.now();
-
-            if (brightenEnabledRef.current) {
-                trail.push({ x, y, t });
-                if (trail.length > trailLenRef.current) {
-                    trail.shift();
-                }
-                return;
-            }
-
-            if (scatterEnabledRef.current) {
-                cursorPrev = cursor;
-                cursor = { x, y, t };
-            }
+            trailEffects.handleMouseMove(x, y, t);
+            scatterEffects.handleMouseMove(x, y, t);
         };
         canvas.addEventListener("mousemove", onMouseMove);
 
-        const onMouseLeave = () => {
-            // stop activating new cells (rest erodes)
-            cursor = null;
-            cursorPrev = null;
-            smoothVx = 0;
-            smoothVy = 0;
-        };
+        const onMouseLeave = () => scatterEffects.handleMouseLeave();
         canvas.addEventListener("mouseleave", onMouseLeave);
 
-        const onClick = (e: MouseEvent) => {
-            if (!clickEnabledRef.current) {
-                return;
-            }
-            const rect = canvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left) * (canvas.width / rect.width);
-            const y = (e.clientY - rect.top) * (canvas.height / rect.height);
-            ripples.push({ x, y, t: performance.now() });
-            if (ripples.length > MAX_RIPPLES) {
-                ripples.shift();
-            }
-        };
+        const onClick = (e: MouseEvent) => clickEffects.handleClick(e, canvas);
         canvas.addEventListener("click", onClick);
 
         const loop = () => {
             // update dynamic uniforms per frame
-            gl.uniform1i(coloredFlagLoc, coloredRef.current ? 1 : 0);
-            gl.uniform1i(videoModeLoc, videoModeRef.current ? 1 : 0);
-            gl.uniform1f(brightnessLoc, brightnessRef.current);
-            gl.uniform1f(saturationLoc, saturationRef.current);
-            gl.uniform1f(bgOpacityLoc, bgOpacityRef.current);
-            gl.uniform1i(mouseEffectFlagLoc, brightenEnabledRef.current ? 1 : 0);
-            gl.uniform1i(scatterEffectFlagLoc, scatterEnabledRef.current ? 1 : 0);
-            gl.uniform1i(clickEffectFlagLoc, clickEnabledRef.current ? 1 : 0);
-            gl.uniform1f(mouseBrightnessLoc, mouseBrightnessRef.current);
-            gl.uniform1f(mouseRadiusLoc, Math.min(canvas.width, canvas.height) * mouseRadiusRef.current);
+            gl.uniform1i(resources.coloredFlagLoc, coloredRef.current ? 1 : 0);
+            gl.uniform1i(resources.videoModeLoc, videoModeRef.current ? 1 : 0);
+            gl.uniform1f(resources.brightnessLoc, brightnessRef.current);
+            gl.uniform1f(resources.saturationLoc, saturationRef.current);
+            gl.uniform1f(resources.bgOpacityLoc, bgOpacityRef.current);
+            gl.uniform1i(resources.mouseEffectFlagLoc, brightenEnabledRef.current ? 1 : 0);
+            gl.uniform1i(resources.scatterEffectFlagLoc, scatterEnabledRef.current ? 1 : 0);
+            gl.uniform1i(resources.clickEffectFlagLoc, clickEnabledRef.current ? 1 : 0);
+            gl.uniform1f(resources.mouseBrightnessLoc, mouseBrightnessRef.current);
+            gl.uniform1f(resources.mouseRadiusLoc, Math.min(canvas.width, canvas.height) * mouseRadiusRef.current);
 
             if (revealEnabled) {
                 const progress = startTime < 0 ? 0.0 : Math.min(1.0, (performance.now() - startTime) / (revealDuration * 1000));
-                gl.uniform1f(revealProgressLoc, progress);
+                gl.uniform1f(resources.revealProgressLoc, progress);
             }
 
             if (video.currentTime != lastTime && video.readyState >= 2) {
                 gl.activeTexture(gl.TEXTURE0);
-                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.bindTexture(gl.TEXTURE_2D, resources.texture);
                 gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, video);
                 lastTime = video.currentTime;
             }
 
-            if (brightenEnabledRef.current) {
-                const now = performance.now();
-                const positions = new Float32Array(trailLenRef.current * 2);
-                const lifeFracs = new Float32Array(trailLenRef.current);
-                for (let i = 0; i < trail.length; i++) {
-                    const age = now - trail[i].t;
-                    const linearLife = Math.max(0, 1 - age / (durationRef.current * 1000));
-                    const lifeFrac = linearLife ** trailDecayRef.current;
-                    positions[i * 2] = trail[i].x;
-                    positions[i * 2 + 1] = trail[i].y;
-                    lifeFracs[i] = lifeFrac;
-                }
-                gl.uniform2fv(mousePositionsLoc, positions);
-                gl.uniform1fv(mouseLifeFracsLoc, lifeFracs);
-            }
-
-            if (scatterEnabledRef.current && gridCols > 0 && gridRows > 0) {
-                const now = performance.now();
-                const dtSec = lastFrameMs < 0 ? 0 : Math.min(0.1, (now - lastFrameMs) / 1000); // time since last frame
-                lastFrameMs = now;
-                const radiusPx = Math.min(canvas.width, canvas.height) * mouseRadiusRef.current;
-
-                // movement gate -> if no movement then erode cursor circle 
-                let cursorActive = false;
-                if (cursor && now - cursor.t < 80) { // cursor moved in last 80ms
-                    if (cursorPrev) {
-                        const eventDt = (cursor.t - cursorPrev.t) / 1000;
-                        // compute smooth velocity
-                        if (eventDt > 0 && eventDt < 0.2) {
-                            const vx = (cursor.x - cursorPrev.x) / eventDt;
-                            const vy = (cursor.y - cursorPrev.y) / eventDt;
-                            smoothVx = smoothVx * 0.7 + vx * 0.3;
-                            smoothVy = smoothVy * 0.7 + vy * 0.3;
-                        }
-                    } else {
-                        smoothVx = 0;
-                        smoothVy = 0;
-                    }
-                    // needs to move fast enough
-                    if (Math.hypot(smoothVx, smoothVy) > charW * 2) {
-                        cursorActive = true;
-                    }
-                } else {
-                    smoothVx *= 0.6;
-                    smoothVy *= 0.6;
-                }
-
-                // activate cells (no erosion for these cells)
-                cellTouched.fill(0);
-                if (cursorActive && cursor && radiusPx > 0) {
-                    const cx = cursor.x;
-                    const cy = cursor.y;
-                    // bound checking area for performance
-                    const minCol = Math.max(0, Math.floor((cx - radiusPx) / charW));
-                    const maxCol = Math.min(gridCols - 1, Math.floor((cx + radiusPx) / charW));
-                    const minRow = Math.max(0, Math.floor((cy - radiusPx) / charH));
-                    const maxRow = Math.min(gridRows - 1, Math.floor((cy + radiusPx) / charH));
-                    for (let row = minRow; row <= maxRow; row++) {
-                        for (let col = minCol; col <= maxCol; col++) {
-                            const cellCx = (col + 0.5) * charW;
-                            const cellCy = (row + 0.5) * charH;
-                            const dd = Math.hypot(cellCx - cx, cellCy - cy);
-                            if (dd > radiusPx) {
-                                continue;
-                            }
-
-                            const k = row * gridCols + col;
-                            cellTouched[k] = 1;
-                            // spawn if new
-                            if (cellChar[k] === 0) {
-                                cellChar[k] = 1 + pickCharIdx();
-                                cellSpeed[k] = 0.5 + Math.random() * 2.0;
-                            }
-                            cellLife[k] = 1.0; // keep at full life
-                        }
-                    }
-                }
-
-                // edge-first erosion
-                const lifetimeSec = durationRef.current;
-                if (dtSec > 0) {
-                    for (let row = 0; row < gridRows; row++) {
-                        for (let col = 0; col < gridCols; col++) {
-                            const k = row * gridCols + col;
-                            // skip inactive/just touched cells
-                            if (cellChar[k] === 0 || cellTouched[k]) {
-                                continue;
-                            }
-                            const left  = col > 0 ? cellChar[k - 1] !== 0 : false;
-                            const right = col < gridCols-1 ? cellChar[k + 1] !== 0 : false;
-                            const up    = row > 0 ? cellChar[k - gridCols] !== 0 : false;
-                            const down  = row < gridRows-1 ? cellChar[k + gridCols] !== 0 : false;
-                            const isEdge = !left || !right || !up || !down; // if it isn't surrounded on all 4 sides
-                            const rate = (isEdge ? 5.0 : 1.0) * cellSpeed[k] / lifetimeSec; // 5 times faster decay rate
-                            cellLife[k] -= rate * dtSec;
-                            if (cellLife[k] <= 0) {
-                                cellChar[k] = 0;
-                            }
-                        }
-                    }
-                }
-
-                gl.activeTexture(gl.TEXTURE5);
-                gl.bindTexture(gl.TEXTURE_2D, scatterStateTexture);
-                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gridCols, gridRows, gl.RED_INTEGER, gl.UNSIGNED_BYTE, cellChar);
-            }
-
-            if (clickEnabledRef.current) {
-                const now = performance.now();
-                const maxDist = Math.hypot(canvas.width, canvas.height);
-                const ripplePositions = new Float32Array(MAX_RIPPLES * 2);
-                const rippleRadii = new Float32Array(MAX_RIPPLES);
-                const rippleBrightnesses = new Float32Array(MAX_RIPPLES);
-                while (ripples.length > 0 && (now - ripples[0].t) * clickSpeedRef.current >= maxDist) {
-                    ripples.shift();
-                }
-                for (let i = 0; i < ripples.length; i++) {
-                    const radius = (now - ripples[i].t) * clickSpeedRef.current;
-                    const t = radius / maxDist;
-                    const brightness = 1.0 + (clickBrightnessRef.current - 1.0) * (1 - t ** 2);
-                    ripplePositions[i * 2] = ripples[i].x;
-                    ripplePositions[i * 2 + 1] = ripples[i].y;
-                    rippleRadii[i] = radius;
-                    rippleBrightnesses[i] = brightness;
-                }
-                gl.uniform2fv(ripplePositionsLoc, ripplePositions);
-                gl.uniform1fv(rippleRadiiLoc, rippleRadii);
-                gl.uniform1fv(rippleBrightnessesLoc, rippleBrightnesses);
-            }
+            trailEffects.tick(gl, resources.mousePositionsLoc, resources.mouseLifeFracsLoc);
+            scatterEffects.tick(gl, canvas);
+            clickEffects.tick(gl, canvas, resources.ripplePositionsLoc, resources.rippleRadiiLoc, resources.rippleBrightnessesLoc);
 
             if (charMode === 'shape') {
                 // 2 pass -> switch between the two fragment shaders each frame
-                gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+                gl.bindFramebuffer(gl.FRAMEBUFFER, resources.fbo);
                 gl.viewport(0, 0, gridCols, gridRows);
                 gl.useProgram(pass1Program);
                 gl.drawArrays(gl.TRIANGLES, 0, 6);
@@ -691,15 +313,15 @@ function AsciiVideoWebGL({
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             gl.viewport(0, 0, canvas.width, canvas.height);
-            gl.uniform2f(resLoc, canvas.width, canvas.height);
+            gl.uniform2f(resources.resLoc, canvas.width, canvas.height);
             gl.useProgram(pass1Program);
-            gl.uniform2f(p1ResLoc, canvas.width, canvas.height);
+            gl.uniform2f(resources.p1ResLoc, canvas.width, canvas.height);
             gl.useProgram(program);
 
             setupGrid(numColsRef.current);
 
             gl.activeTexture(gl.TEXTURE0);
-            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.bindTexture(gl.TEXTURE_2D, resources.texture);
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
 
             video.play();
@@ -735,21 +357,21 @@ function AsciiVideoWebGL({
             canvas.removeEventListener("mouseleave", onMouseLeave);
             canvas.removeEventListener("click", onClick);
 
-            gl.deleteTexture(texture);
-            gl.deleteTexture(charVectorsTexture);
-            gl.deleteFramebuffer(fbo);
-            gl.deleteTexture(fboTexture);
-            gl.deleteBuffer(buffer);
-            gl.deleteShader(vertShader);
-            gl.deleteShader(fragShader);
-            gl.deleteShader(pass1FragShader);
+            gl.deleteTexture(resources.texture);
+            gl.deleteTexture(resources.charVectorsTexture);
+            gl.deleteFramebuffer(resources.fbo);
+            gl.deleteTexture(resources.fboTexture);
+            gl.deleteBuffer(resources.buffer);
+            gl.deleteShader(resources.vertShader);
+            gl.deleteShader(resources.fragShader);
+            gl.deleteShader(resources.pass1FragShader);
             gl.deleteProgram(program);
             gl.deleteProgram(pass1Program);
             gl.deleteTexture(atlasTextureRef.current);
             gl.deleteTexture(scatterAtlasTextureRef.current);
-            gl.deleteTexture(scatterStateTexture);
+            gl.deleteTexture(resources.scatterStateTexture);
         };
-    }, [sources, isMultiSource, charMode, chars, revealEffectFlag, revealDuration, revealEnabled]);
+    }, [src, charMode, chars, revealEffectFlag, revealDuration, revealEnabled]);
 
     const canvasStyle: React.CSSProperties = fit === 'height'
         ? { height: '100%', width: 'auto', display: 'block' }
@@ -757,8 +379,8 @@ function AsciiVideoWebGL({
 
     return (
         <div className={className} style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
-            <video ref={videoRef} muted playsInline autoPlay loop={!isMultiSource} style={{ display: "none" }}>
-                <source src={sources[0]} type="video/mp4" />
+            <video ref={videoRef} muted playsInline autoPlay loop={!Array.isArray(src) || src.length === 1} style={{ display: "none" }}>
+                <source src={Array.isArray(src) ? src[0] : src} type="video/mp4" />
             </video>
             <canvas ref={canvasRef} style={canvasStyle} />
         </div>
