@@ -293,7 +293,7 @@ function VideoAscii({
                 gl.uniform1f(resources.revealProgressLoc, progress);
             }
 
-            if (video.currentTime != lastTime && video.readyState >= 2) {
+            if (loadedRef.current && video.currentTime != lastTime && video.readyState >= 2) {
                 gl.activeTexture(gl.TEXTURE0);
                 gl.bindTexture(gl.TEXTURE_2D, resources.texture);
                 gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, video);
@@ -350,8 +350,10 @@ function VideoAscii({
         if (isMultiSource) {
             video.addEventListener("ended", onEnded);
         }
-        if (video.readyState >= 2) {
-            onLoaded(); // call onloaded again if its the reveal effect that changed (no freeze)
+        if (video.readyState >= 2 && video.currentSrc.endsWith(sources[0])) {
+            onLoaded(); 
+        } else if (!video.currentSrc.endsWith(sources[0])) {
+            video.load(); // updates src in source -> need to trigger reload
         }
 
         return () => {
