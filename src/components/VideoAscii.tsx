@@ -67,7 +67,13 @@ function VideoAscii({
         trailLenRef.current = trailLen;
         trailDecayRef.current = trailDecay;
         durationRef.current = duration;
-        scatterCharsRef.current = scatterChars;
+        // rebuild immediately after ref -> no effect ordering ambiguity
+        if (scatterCharsRef.current !== scatterChars && loadedRef.current) {
+            scatterCharsRef.current = scatterChars;
+            rebuildScatterAtlasRef.current?.();
+        } else {
+            scatterCharsRef.current = scatterChars;
+        }
         clickEnabledRef.current = clickEnabled;
         clickBrightnessRef.current = clickBrightness;
         clickSpeedRef.current = clickSpeed;
@@ -95,6 +101,7 @@ function VideoAscii({
     ]);
 
     const setupGridRef = useRef<((nc: number) => void) | null>(null);
+    const rebuildScatterAtlasRef = useRef<(() => void) | null>(null);
     const loadedRef = useRef(false);
 
     // numCols change -> refresh atlas/grid textures without full GL reinit
@@ -149,11 +156,12 @@ function VideoAscii({
         const sources = Array.isArray(src) ? src : [src];
         const isMultiSource = sources.length > 1;
 
+        // extract hiddenCtx (use it for all reusable writing)
+        const hiddenCanvas = document.createElement('canvas');
+        const hiddenCtx = hiddenCanvas.getContext('2d')!;
+
         // sets up new character grid based on column count
         const setupGrid = (nc: number) => {
-            const hiddenCanvas = document.createElement('canvas');
-            const hiddenCtx = hiddenCanvas.getContext('2d')!;
-
             charW = Math.max(1, Math.floor(canvas.width / nc)); // num pixels per char (width)
             // probe and scale to find charH
             const probe = charW * 2;
@@ -224,12 +232,16 @@ function VideoAscii({
             gl.uniform1f(resources.numLoc, chars.length);
             gl.uniform2f(resources.sizeLoc, charW, charH);
 
-            // draw scatter atlas texture
+            rebuildScatterAtlas();
+        };
+
+        // explicit rebuild of scatter atlas texture
+        const rebuildScatterAtlas = () => {
             const sc = scatterCharsRef.current;
             hiddenCanvas.width = sc.length * charW;
             hiddenCanvas.height = charH;
             hiddenCtx.fillStyle = 'black';
-            hiddenCtx.fillRect(0, 0, sc.length * charW, charH);
+            hiddenCtx.fillRect(0, 0, hiddenCanvas.width, charH);
             hiddenCtx.fillStyle = 'white';
             hiddenCtx.textBaseline = 'top';
             hiddenCtx.font = `${charH}px monospace`;
@@ -240,10 +252,12 @@ function VideoAscii({
             gl.bindTexture(gl.TEXTURE_2D, scatterAtlasTextureRef.current);
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hiddenCanvas);
             gl.uniform1f(resources.scatterNumCharsLoc, sc.length);
+            scatterEffects.reset(gl);
         };
 
-        // attach function to ref -> can call outside of useEffect without rerender
+        // attach functions to refs -> can call outside of useEffect without rerender
         setupGridRef.current = setupGrid;
+        rebuildScatterAtlasRef.current = rebuildScatterAtlas;
 
         const onMouseMove = (e: MouseEvent) => {
             if (!mouseEnabledRef.current) return;
@@ -342,6 +356,7 @@ function VideoAscii({
 
         return () => {
             setupGridRef.current = null;
+            rebuildScatterAtlasRef.current = null;
             loadedRef.current = false;
             cancelAnimationFrame(animFrameId);
             video.removeEventListener("loadeddata", onLoaded);
