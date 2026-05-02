@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [
     react(),
     glsl(),
-    dts({ include: ['src'] }),
+    dts({ outDirs: 'dist', tsconfigPath: './tsconfig.app.json', entryRoot: 'src' }),
   ],
   build: {
     lib: {
