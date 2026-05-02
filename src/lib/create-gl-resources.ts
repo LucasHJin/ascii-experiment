@@ -26,7 +26,6 @@ export interface GLResources {
     p1ExponentLoc: WebGLUniformLocation | null;
     // pass2 uniform locations
     revealEffectFlagLoc: WebGLUniformLocation | null;
-    coloredFlagLoc: WebGLUniformLocation | null;
     mouseEffectFlagLoc: WebGLUniformLocation | null;
     clickEffectFlagLoc: WebGLUniformLocation | null;
     shapeMatchingLoc: WebGLUniformLocation | null;
@@ -157,7 +156,6 @@ export function createGLResources(gl: WebGL2RenderingContext): GLResources | nul
 
     // effects
     const revealEffectFlagLoc = gl.getUniformLocation(program, "u_revealEffectFlag");
-    const coloredFlagLoc = gl.getUniformLocation(program, "u_coloredFlag");
     const mouseEffectFlagLoc = gl.getUniformLocation(program, "u_mouseEffect");
     const clickEffectFlagLoc = gl.getUniformLocation(program, "u_clickEffect");
     const shapeMatchingLoc = gl.getUniformLocation(program, "u_shapeMatching");
@@ -187,7 +185,7 @@ export function createGLResources(gl: WebGL2RenderingContext): GLResources | nul
         texture, atlasTexture, charVectorsTexture, fboTexture, fbo,
         scatterAtlasTexture, scatterStateTexture,
         p1ResLoc, p1CellsizeLoc, p1CircleNLoc, p1NumCharsLoc, p1ExponentLoc,
-        revealEffectFlagLoc, coloredFlagLoc, mouseEffectFlagLoc, clickEffectFlagLoc,
+        revealEffectFlagLoc, mouseEffectFlagLoc, clickEffectFlagLoc,
         shapeMatchingLoc, revealProgressLoc, brightnessLoc, saturationLoc, bgOpacityLoc,
         mouseBrightnessLoc, mousePositionsLoc, mouseLifeFracsLoc, mouseRadiusLoc,
         ripplePositionsLoc, rippleRadiiLoc, rippleBrightnessesLoc,

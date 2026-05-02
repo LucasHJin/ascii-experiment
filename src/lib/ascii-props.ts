@@ -26,7 +26,6 @@ export interface Props {
     src: string | string[]; // when calling, can't use inline array directly (or else if state rerenders, it will create a new array)
     videoMode?: boolean;
     numColsRaw?: number;
-    colored?: boolean;
     brightnessRaw?: number;
     saturationRaw?: number;
     bgOpacityRaw?: number;

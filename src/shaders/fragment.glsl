@@ -5,7 +5,6 @@ precision highp usampler2D;
 
 // flags
 uniform int u_revealEffectFlag;
-uniform bool u_coloredFlag;
 uniform bool u_videoMode;
 
 // effects
@@ -105,15 +104,10 @@ void main() {
 
     vec3 cellColor = texture(u_texture, sampleUV).rgb;
     float luminosity = dot(cellColor, vec3(0.299, 0.587, 0.114)); // luminance of pixel
-    if (u_coloredFlag) {
-        // use hsl instead of rgb for brightness and saturation
-        vec3 hsl = rgb2hsl(cellColor);
-        hsl.z = clamp(hsl.z * u_brightness, 0.0, 1.0);
-        hsl.y = clamp(hsl.y * u_saturation, 0.0, 1.0);
-        cellColor = hsl2rgb(hsl);
-    } else {
-        cellColor = vec3(clamp(luminosity * u_brightness, 0.0, 1.0));
-    }
+    vec3 hsl = rgb2hsl(cellColor);
+    hsl.z = clamp(hsl.z * u_brightness, 0.0, 1.0);
+    hsl.y = clamp(hsl.y * u_saturation, 0.0, 1.0);
+    cellColor = hsl2rgb(hsl);
 
     vec2 withinCellPos = fract(fragCoord / u_cellsize);
 

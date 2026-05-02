@@ -11,7 +11,6 @@ function VideoAscii({
         src,
         videoMode = false,
         numColsRaw = 250,
-        colored = true,
         brightnessRaw = 1.0,
         saturationRaw = 1.0,
         bgOpacityRaw = 0.3,
@@ -39,7 +38,6 @@ function VideoAscii({
     const brightnessRef = useRef(brightness);
     const saturationRef = useRef(saturation);
     const bgOpacityRef = useRef(bgOpacity);
-    const coloredRef = useRef(colored);
     const mouseEnabledRef = useRef(mouseEnabled);
     const mouseStyleRef = useRef(mouseStyle);
     const brightenEnabledRef = useRef(brightenEnabled);
@@ -60,7 +58,6 @@ function VideoAscii({
         brightnessRef.current = brightness;
         saturationRef.current = saturation;
         bgOpacityRef.current = bgOpacity;
-        coloredRef.current = colored;
         mouseEnabledRef.current = mouseEnabled;
         mouseStyleRef.current = mouseStyle;
         brightenEnabledRef.current = brightenEnabled;
@@ -80,7 +77,6 @@ function VideoAscii({
         brightness,
         saturation,
         bgOpacity,
-        colored,
         mouseEnabled,
         mouseStyle,
         brightenEnabled,
@@ -268,7 +264,6 @@ function VideoAscii({
 
         const loop = () => {
             // update dynamic uniforms per frame
-            gl.uniform1i(resources.coloredFlagLoc, coloredRef.current ? 1 : 0);
             gl.uniform1i(resources.videoModeLoc, videoModeRef.current ? 1 : 0);
             gl.uniform1f(resources.brightnessLoc, brightnessRef.current);
             gl.uniform1f(resources.saturationLoc, saturationRef.current);
