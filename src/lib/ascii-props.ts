@@ -98,7 +98,7 @@ export function parseProps(
     // prop checks
     const numCols = Math.max(60, Math.min(350, Math.round(numColsRaw)));
     const brightness = Math.max(0.0, Math.min(2.0, brightnessRaw));
-    const saturation = Math.max(0.0, Math.min(3.0, saturationRaw));
+    const saturation = Math.max(0.0, Math.min(2.0, saturationRaw));
     const bgOpacity = Math.max(0.0, Math.min(1.0, bgOpacityRaw));
     revealDuration = Math.max(0.1, Math.min(4, revealDuration));
     trailLen = Math.max(0, Math.min(30, Math.round(trailLen)));

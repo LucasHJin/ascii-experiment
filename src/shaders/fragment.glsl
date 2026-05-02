@@ -51,6 +51,28 @@ float hash(vec2 p) {
     return fract((p3.x + p3.y) * p3.z); // final fract to be between 0 and 1
 }
 
+vec3 rgb2hsl(vec3 c) {
+    float maxC = max(c.r, max(c.g, c.b));
+    float minC = min(c.r, min(c.g, c.b));
+    float l = (maxC + minC) * 0.5;
+    float d = maxC - minC;
+    float h = 0.0, s = 0.0;
+    if (d > 0.0) {
+        s = d / (1.0 - abs(2.0 * l - 1.0));
+        if (maxC == c.r) h = mod((c.g - c.b) / d, 6.0) / 6.0;
+        else if (maxC == c.g) h = ((c.b - c.r) / d + 2.0) / 6.0;
+        else h = ((c.r - c.g) / d + 4.0) / 6.0;
+    }
+    return vec3(h, s, l);
+}
+
+vec3 hsl2rgb(vec3 c) {
+    float h = c.x, s = c.y, l = c.z;
+    float a = s * (1.0 - abs(2.0 * l - 1.0));
+    vec3 rgb = clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    return l + a * (rgb - 0.5);
+}
+
 void main() {
     vec2 fragCoord = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y); // flip y coords
     vec2 cellCoord = floor(fragCoord / u_cellsize);
@@ -84,11 +106,14 @@ void main() {
     vec3 cellColor = texture(u_texture, sampleUV).rgb;
     float luminosity = dot(cellColor, vec3(0.299, 0.587, 0.114)); // luminance of pixel
     if (u_coloredFlag) {
-        cellColor = clamp(mix(vec3(luminosity), cellColor, u_saturation), 0.0, 1.0); // increase saturation (clamped)
+        // use hsl instead of rgb for brightness and saturation
+        vec3 hsl = rgb2hsl(cellColor);
+        hsl.z = clamp(hsl.z * u_brightness, 0.0, 1.0);
+        hsl.y = clamp(hsl.y * u_saturation, 0.0, 1.0);
+        cellColor = hsl2rgb(hsl);
     } else {
-        cellColor = vec3(luminosity);
+        cellColor = vec3(clamp(luminosity * u_brightness, 0.0, 1.0));
     }
-    cellColor = pow(cellColor, vec3(2.0 - u_brightness)); // boost brightness
 
     vec2 withinCellPos = fract(fragCoord / u_cellsize);
 
