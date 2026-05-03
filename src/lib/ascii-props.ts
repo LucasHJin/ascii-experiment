@@ -107,7 +107,7 @@ export function parseProps(
     let revealDuration = revealOpts.duration ?? 0.4;
 
     // prop checks
-    const numCols = Math.max(60, Math.min(350, Math.round(numColsRaw)));
+    const numCols = Math.max(20, Math.min(350, Math.round(numColsRaw)));
     const brightness = Math.max(0.0, Math.min(2.0, brightnessRaw));
     const saturation = Math.max(0.0, Math.min(2.0, saturationRaw));
     const bgOpacity = Math.max(0.0, Math.min(1.0, bgOpacityRaw));

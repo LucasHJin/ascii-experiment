@@ -184,13 +184,20 @@ function VideoAscii({
             gridCols = Math.floor(canvas.width / charW);
             gridRows = Math.floor(canvas.height / charH);
 
-            // float cell size so it goes all the way to the edges (no remaining whitespace) -> very slight stretch
-            const cellW = canvas.width / gridCols;
-            const cellH = canvas.height / gridRows;
+            // snap canvas to exact integer multiples (no float boundary errors) -> fill with css not with gpu
+                // only small stretch: shader crops video to canvas, canvas gets stretched to container
+            canvas.width = gridCols * charW;
+            canvas.height = gridRows * charH;
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.useProgram(program);
+            gl.uniform2f(resources.resLoc, canvas.width, canvas.height);
+            gl.useProgram(pass1Program);
+            gl.uniform2f(resources.p1ResLoc, canvas.width, canvas.height);
+            gl.useProgram(program);
 
             // resize for scatter and spread effects
-            scatterEffects.setup(gl, gridCols, gridRows, cellW, cellH, resources.scatterStateTexture);
-            spreadEffects.setup(gl, gridCols, gridRows, cellW, cellH, resources.spreadStateTexture);
+            scatterEffects.setup(gl, gridCols, gridRows, charW, charH, resources.scatterStateTexture);
+            spreadEffects.setup(gl, gridCols, gridRows, charW, charH, resources.spreadStateTexture);
 
             if (charMode === 'shape') {
                 shapeData = computeShapeVectors(chars, charW, charH);
@@ -224,7 +231,7 @@ function VideoAscii({
                 // scale sampling density with font size
                 const circleN = Math.max(1, Math.round(charW / 5));
                 gl.useProgram(pass1Program);
-                gl.uniform2f(resources.p1CellsizeLoc, cellW, cellH);
+                gl.uniform2f(resources.p1CellsizeLoc, charW, charH);
                 gl.uniform1i(resources.p1CircleNLoc, circleN);
                 gl.uniform1i(resources.p1NumCharsLoc, numChars);
                 gl.uniform1f(resources.p1ExponentLoc, 2.0);
@@ -247,7 +254,7 @@ function VideoAscii({
             gl.bindTexture(gl.TEXTURE_2D, atlasTextureRef.current);
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hiddenCanvas);
             gl.uniform1f(resources.numLoc, chars.length);
-            gl.uniform2f(resources.sizeLoc, cellW, cellH);
+            gl.uniform2f(resources.sizeLoc, charW, charH);
 
             rebuildScatterAtlas();
         };
@@ -276,20 +283,15 @@ function VideoAscii({
         setupGridRef.current = setupGrid;
         rebuildScatterAtlasRef.current = rebuildScatterAtlas;
 
-        // size canvas to container display dimensions 
+        // size canvas to container display dimensions
         const setupCanvas = (containerW: number, containerH: number) => {
-            const dpr = window.devicePixelRatio || 1;
-            canvas.width = Math.round(containerW * dpr);
-            canvas.height = Math.round(containerH * dpr);
-            gl.viewport(0, 0, canvas.width, canvas.height);
-            gl.uniform2f(resources.resLoc, canvas.width, canvas.height);
-            gl.useProgram(pass1Program);
-            gl.uniform2f(resources.p1ResLoc, canvas.width, canvas.height);
-            gl.useProgram(program);
+            canvas.width = Math.round(containerW);
+            canvas.height = Math.round(containerH);
+            setupGrid(numColsRef.current);
 
-            // center-crop video to match display aspect resolution 
+            // center-crop video to match snapped canvas AR (avoids slight AR error from container dimensions)
             const videoAR = video.videoWidth / video.videoHeight;
-            const displayAR = containerW / containerH;
+            const displayAR = canvas.width / canvas.height;
             let scaleX = 1.0;
             let scaleY = 1.0;
             let offsetX = 0.0;
@@ -307,8 +309,6 @@ function VideoAscii({
             gl.uniform2f(resources.p1CropOffsetLoc, offsetX, offsetY);
             gl.uniform2f(resources.p1CropScaleLoc, scaleX, scaleY);
             gl.useProgram(program);
-
-            setupGrid(numColsRef.current);
         };
 
         const onMouseMove = (e: MouseEvent) => {
