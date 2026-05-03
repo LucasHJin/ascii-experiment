@@ -118,3 +118,9 @@ Passed to `revealEffect`. All fields optional.
 |-------|------|---------|-------|-------------|
 | `type` | `'diagonal' \| 'radial' \| 'random'` | `'random'` | — | Pattern in which characters appear on load. |
 | `duration` | `number` | `0.4` | `0.1–4` | Reveal animation duration in seconds. |
+
+---
+
+### `chars`
+
+The default `chars` set is: `` `.',-_:!;|\"~+^lr[](\\/L)>t<v=Tz?icf1{sIxY*jJno}CZyVwmSXRqM$O%#9&NW0Q@``.
