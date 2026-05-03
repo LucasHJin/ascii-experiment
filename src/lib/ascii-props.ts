@@ -13,8 +13,13 @@ export interface MouseEffectOptions {
 }
 
 export interface ClickEffectOptions {
+    style?: 'ripple' | 'spread';
+    // ripple only
     brightness?: number;
     speed?: number;
+    // spread only
+    spreadExpandDuration?: number;
+    spreadSpeed?: number;
 }
 
 export interface RevealEffectOptions {
@@ -56,6 +61,9 @@ export interface ParsedProps {
     clickEnabled: boolean;
     clickBrightness: number;
     clickSpeed: number;
+    spreadEnabled: boolean;
+    spreadExpandDuration: number;
+    spreadSpeed: number;
     revealEnabled: boolean;
     revealType: string;
     revealDuration: number;
@@ -84,10 +92,15 @@ export function parseProps(
     let mouseRadius = mouseOpts.radius ?? (mouseStyle === 'scatter' ? 0.05 : 0.08);
     let mouseBrightness = mouseOpts.brightness ?? 2.0;
 
-    const clickEnabled = !!clickEffect;
+    const anyClickEnabled = !!clickEffect;
     const clickOpts = typeof clickEffect === 'object' ? clickEffect : {};
+    const clickStyle = clickOpts.style ?? 'ripple';
+    const clickEnabled = anyClickEnabled && clickStyle !== 'spread';
+    const spreadEnabled = anyClickEnabled && clickStyle === 'spread';
     let clickBrightness = clickOpts.brightness ?? 1.1;
     let clickSpeed = clickOpts.speed ?? 2;
+    let spreadExpandDuration = clickOpts.spreadExpandDuration ?? 1.5;
+    let spreadSpeed = clickOpts.spreadSpeed ?? 7.5;
 
     const revealEnabled = !!revealEffect;
     const revealOpts = typeof revealEffect === 'object' ? revealEffect : {};
@@ -107,6 +120,8 @@ export function parseProps(
     mouseBrightness = Math.max(0.2, Math.min(5.0, mouseBrightness));
     clickBrightness = Math.max(1.05, Math.min(2.0, clickBrightness));
     clickSpeed = Math.max(0.5, Math.min(4.0, clickSpeed));
+    spreadExpandDuration = Math.max(0.5, Math.min(5.0, spreadExpandDuration));
+    spreadSpeed = Math.max(0.5, Math.min(10.0, spreadSpeed));
 
     let revealEffectFlag;
     if (!revealEnabled) {
@@ -124,6 +139,7 @@ export function parseProps(
         mouseEnabled, mouseStyle, brightenEnabled, scatterEnabled,
         scatterChars, trailLen, trailDecay, duration, mouseRadius, mouseBrightness,
         clickEnabled, clickBrightness, clickSpeed,
+        spreadEnabled, spreadExpandDuration, spreadSpeed,
         revealEnabled, revealType, revealDuration, revealEffectFlag,
     };
 }

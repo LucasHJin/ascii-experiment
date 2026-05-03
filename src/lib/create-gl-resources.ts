@@ -18,6 +18,7 @@ export interface GLResources {
     fbo: WebGLFramebuffer;
     scatterAtlasTexture: WebGLTexture;
     scatterStateTexture: WebGLTexture;
+    spreadStateTexture: WebGLTexture;
     // pass1 uniform locations
     p1ResLoc: WebGLUniformLocation | null;
     p1CellsizeLoc: WebGLUniformLocation | null;
@@ -42,6 +43,7 @@ export interface GLResources {
     rippleBrightnessesLoc: WebGLUniformLocation | null;
     scatterEffectFlagLoc: WebGLUniformLocation | null;
     scatterNumCharsLoc: WebGLUniformLocation | null;
+    spreadEffectFlagLoc: WebGLUniformLocation | null;
     videoModeLoc: WebGLUniformLocation | null;
     resLoc: WebGLUniformLocation | null;
     sizeLoc: WebGLUniformLocation | null;
@@ -148,11 +150,21 @@ export function createGLResources(gl: WebGL2RenderingContext): GLResources | nul
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
+    // spread state texture
+    const spreadStateTexture = gl.createTexture()!;
+    gl.activeTexture(gl.TEXTURE6);
+    gl.bindTexture(gl.TEXTURE_2D, spreadStateTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
     // pass2 uniform locations
     gl.useProgram(program);
     gl.uniform1i(gl.getUniformLocation(program, "u_fboTexture"), 3);
     gl.uniform1i(gl.getUniformLocation(program, "u_scatterAtlas"), 4);
     gl.uniform1i(gl.getUniformLocation(program, "u_scatterStateTexture"), 5);
+    gl.uniform1i(gl.getUniformLocation(program, "u_spreadStateTexture"), 6);
 
     // effects
     const revealEffectFlagLoc = gl.getUniformLocation(program, "u_revealEffectFlag");
@@ -172,6 +184,7 @@ export function createGLResources(gl: WebGL2RenderingContext): GLResources | nul
     const rippleBrightnessesLoc = gl.getUniformLocation(program, "u_rippleBrightnesses");
     const scatterEffectFlagLoc = gl.getUniformLocation(program, "u_scatterEffect");
     const scatterNumCharsLoc = gl.getUniformLocation(program, "u_scatterNumChars");
+    const spreadEffectFlagLoc = gl.getUniformLocation(program, "u_spreadEffect");
     const videoModeLoc = gl.getUniformLocation(program, "u_videoMode");
     const resLoc = gl.getUniformLocation(program, "u_resolution");
     const sizeLoc = gl.getUniformLocation(program, "u_cellsize");
@@ -183,13 +196,13 @@ export function createGLResources(gl: WebGL2RenderingContext): GLResources | nul
         buffer,
         vertShader, fragShader, pass1FragShader,
         texture, atlasTexture, charVectorsTexture, fboTexture, fbo,
-        scatterAtlasTexture, scatterStateTexture,
+        scatterAtlasTexture, scatterStateTexture, spreadStateTexture,
         p1ResLoc, p1CellsizeLoc, p1CircleNLoc, p1NumCharsLoc, p1ExponentLoc,
         revealEffectFlagLoc, mouseEffectFlagLoc, clickEffectFlagLoc,
         shapeMatchingLoc, revealProgressLoc, brightnessLoc, saturationLoc, bgOpacityLoc,
         mouseBrightnessLoc, mousePositionsLoc, mouseLifeFracsLoc, mouseRadiusLoc,
         ripplePositionsLoc, rippleRadiiLoc, rippleBrightnessesLoc,
-        scatterEffectFlagLoc, scatterNumCharsLoc, videoModeLoc,
+        scatterEffectFlagLoc, scatterNumCharsLoc, spreadEffectFlagLoc, videoModeLoc,
         resLoc, sizeLoc, numLoc, gridSizeLoc,
     };
 }

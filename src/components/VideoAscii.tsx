@@ -6,6 +6,7 @@ import { createGLResources } from "../lib/create-gl-resources";
 import { createScatterEffect } from "../lib/scatter-effect";
 import { createMouseTrail } from "../lib/brighten-effect";
 import { createClickEffect } from "../lib/click-effect";
+import { createSpreadEffect } from "../lib/spread-effect";
 
 function VideoAscii({
         src,
@@ -31,6 +32,7 @@ function VideoAscii({
             mouseEnabled, mouseStyle, brightenEnabled, scatterEnabled,
             scatterChars, trailLen, trailDecay, duration, mouseRadius, mouseBrightness,
             clickEnabled, clickBrightness, clickSpeed,
+            spreadEnabled, spreadExpandDuration, spreadSpeed,
             revealEnabled, revealDuration, revealEffectFlag,
     } = parseProps(numColsRaw, brightnessRaw, saturationRaw, bgOpacityRaw, mouseEffect, clickEffect, revealEffect);
 
@@ -51,6 +53,9 @@ function VideoAscii({
     const clickEnabledRef = useRef(clickEnabled);
     const clickBrightnessRef = useRef(clickBrightness);
     const clickSpeedRef = useRef(clickSpeed);
+    const spreadEnabledRef = useRef(spreadEnabled);
+    const spreadExpandDurationRef = useRef(spreadExpandDuration);
+    const spreadSpeedRef = useRef(spreadSpeed);
     const numColsRef = useRef(numCols);
     const videoModeRef = useRef(videoMode);
     // update refs inside useEffect (not in render) -> avoids unintentional errors
@@ -77,6 +82,9 @@ function VideoAscii({
         clickEnabledRef.current = clickEnabled;
         clickBrightnessRef.current = clickBrightness;
         clickSpeedRef.current = clickSpeed;
+        spreadEnabledRef.current = spreadEnabled;
+        spreadExpandDurationRef.current = spreadExpandDuration;
+        spreadSpeedRef.current = spreadSpeed;
         numColsRef.current = numCols;
         videoModeRef.current = videoMode;
     }, [
@@ -96,6 +104,9 @@ function VideoAscii({
         clickEnabled,
         clickBrightness,
         clickSpeed,
+        spreadEnabled,
+        spreadExpandDuration,
+        spreadSpeed,
         numCols,
         videoMode,
     ]);
@@ -147,6 +158,7 @@ function VideoAscii({
         const scatterEffects = createScatterEffect({ scatterEnabledRef, mouseRadiusRef, durationRef, scatterCharsRef });
         const trailEffects = createMouseTrail({ brightenEnabledRef, trailLenRef, durationRef, trailDecayRef });
         const clickEffects = createClickEffect({ clickEnabledRef, clickSpeedRef, clickBrightnessRef });
+        const spreadEffects = createSpreadEffect({ spreadEnabledRef, scatterCharsRef, spreadExpandDurationRef, spreadSpeedRef });
 
         let animFrameId: number;
         let lastTime = -1;
@@ -172,8 +184,9 @@ function VideoAscii({
             gridCols = Math.floor(canvas.width / charW);
             gridRows = Math.floor(canvas.height / charH);
 
-            // resize for scatter effect
+            // resize for scatter and spread effects
             scatterEffects.setup(gl, gridCols, gridRows, charW, charH, resources.scatterStateTexture);
+            spreadEffects.setup(gl, gridCols, gridRows, charW, charH, resources.spreadStateTexture);
 
             if (charMode === 'shape') {
                 shapeData = computeShapeVectors(chars, charW, charH);
@@ -273,7 +286,10 @@ function VideoAscii({
         const onMouseLeave = () => scatterEffects.handleMouseLeave();
         canvas.addEventListener("mouseleave", onMouseLeave);
 
-        const onClick = (e: MouseEvent) => clickEffects.handleClick(e, canvas);
+        const onClick = (e: MouseEvent) => {
+            clickEffects.handleClick(e, canvas);
+            spreadEffects.handleClick(e, canvas);
+        };
         canvas.addEventListener("click", onClick);
 
         const loop = () => {
@@ -285,6 +301,7 @@ function VideoAscii({
             gl.uniform1i(resources.mouseEffectFlagLoc, brightenEnabledRef.current ? 1 : 0);
             gl.uniform1i(resources.scatterEffectFlagLoc, scatterEnabledRef.current ? 1 : 0);
             gl.uniform1i(resources.clickEffectFlagLoc, clickEnabledRef.current ? 1 : 0);
+            gl.uniform1i(resources.spreadEffectFlagLoc, spreadEnabledRef.current ? 1 : 0);
             gl.uniform1f(resources.mouseBrightnessLoc, mouseBrightnessRef.current);
             gl.uniform1f(resources.mouseRadiusLoc, Math.min(canvas.width, canvas.height) * mouseRadiusRef.current);
 
@@ -303,6 +320,7 @@ function VideoAscii({
             trailEffects.tick(gl, resources.mousePositionsLoc, resources.mouseLifeFracsLoc);
             scatterEffects.tick(gl, canvas);
             clickEffects.tick(gl, canvas, resources.ripplePositionsLoc, resources.rippleRadiiLoc, resources.rippleBrightnessesLoc);
+            spreadEffects.tick(gl);
 
             if (charMode === 'shape') {
                 // 2 pass -> switch between the two fragment shaders each frame
@@ -382,6 +400,7 @@ function VideoAscii({
             gl.deleteTexture(atlasTextureRef.current);
             gl.deleteTexture(scatterAtlasTextureRef.current);
             gl.deleteTexture(resources.scatterStateTexture);
+            gl.deleteTexture(resources.spreadStateTexture);
         };
     }, [src, charMode, chars, revealEffectFlag, revealDuration, revealEnabled]);
 

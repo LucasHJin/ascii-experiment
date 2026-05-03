@@ -31,6 +31,9 @@ uniform usampler2D u_scatterStateTexture; // gridCols x gridRows, R8UI: 0=inacti
 uniform sampler2D u_scatterAtlas;          // wide atlas of u_scatterNumChars glyphs
 uniform float u_scatterNumChars;
 
+uniform bool u_spreadEffect;
+uniform usampler2D u_spreadStateTexture;
+
 uniform bool u_shapeMatching;
 
 uniform sampler2D u_texture;
@@ -136,6 +139,18 @@ void main() {
             float su = (float(idx) + withinCellPos.x) / u_scatterNumChars;
             float mask = texture(u_scatterAtlas, vec2(su, withinCellPos.y)).r;
             // video mode -> scatter chars composites over video pixel 
+            vec3 scatterBg = u_videoMode ? cellColor : bgColor;
+            scatterColor = mix(scatterBg, vec3(1.0), mask);
+            scatterHit = true;
+        }
+    }
+    
+    if (!scatterHit && u_spreadEffect) { // scatter takes priority
+        uint state = texelFetch(u_spreadStateTexture, ivec2(cellCoord), 0).r;
+        if (state > 0u) {
+            int idx = int(state) - 1;
+            float su = (float(idx) + withinCellPos.x) / u_scatterNumChars;
+            float mask = texture(u_scatterAtlas, vec2(su, withinCellPos.y)).r;
             vec3 scatterBg = u_videoMode ? cellColor : bgColor;
             scatterColor = mix(scatterBg, vec3(1.0), mask);
             scatterHit = true;
