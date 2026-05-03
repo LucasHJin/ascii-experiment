@@ -43,6 +43,8 @@ uniform vec2 u_resolution;
 uniform vec2 u_cellsize;
 uniform float u_numChars;
 uniform vec2 u_gridSize;
+uniform vec2 u_cropOffset;
+uniform vec2 u_cropScale;
 
 out vec4 fragColor;
 
@@ -102,8 +104,9 @@ void main() {
     }
 
     vec2 cellCenter = (cellCoord + 0.5) * u_cellsize; // figure out center pixel of cell
-    // sample per pixel vs per cell center (video vs ascii)
-    vec2 sampleUV = u_videoMode ? (fragCoord / u_resolution) : (cellCenter / u_resolution);
+    // sample per pixel vs per cell center (video vs ascii), then remap into cropped video region
+    vec2 rawUV = u_videoMode ? (fragCoord / u_resolution) : (cellCenter / u_resolution);
+    vec2 sampleUV = u_cropOffset + rawUV * u_cropScale;
 
     vec3 cellColor = texture(u_texture, sampleUV).rgb;
     float luminosity = dot(cellColor, vec3(0.299, 0.587, 0.114)); // luminance of pixel

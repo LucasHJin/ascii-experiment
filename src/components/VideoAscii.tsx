@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { computeShapeVectors } from "../lib/ascii-utils";
 import { DEFAULT_CHARS, parseProps } from "../lib/ascii-props";
 import type { Props } from "../lib/ascii-props";
@@ -20,11 +20,11 @@ function VideoAscii({
         mouseEffect = true,
         clickEffect = true,
         charMode = 'shape',
-        fit = 'width',
         className,
     }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
     const atlasTextureRef = useRef<WebGLTexture | null>(null);
     const scatterAtlasTextureRef = useRef<WebGLTexture | null>(null);
 
@@ -184,9 +184,13 @@ function VideoAscii({
             gridCols = Math.floor(canvas.width / charW);
             gridRows = Math.floor(canvas.height / charH);
 
+            // float cell size so it goes all the way to the edges (no remaining whitespace) -> very slight stretch
+            const cellW = canvas.width / gridCols;
+            const cellH = canvas.height / gridRows;
+
             // resize for scatter and spread effects
-            scatterEffects.setup(gl, gridCols, gridRows, charW, charH, resources.scatterStateTexture);
-            spreadEffects.setup(gl, gridCols, gridRows, charW, charH, resources.spreadStateTexture);
+            scatterEffects.setup(gl, gridCols, gridRows, cellW, cellH, resources.scatterStateTexture);
+            spreadEffects.setup(gl, gridCols, gridRows, cellW, cellH, resources.spreadStateTexture);
 
             if (charMode === 'shape') {
                 shapeData = computeShapeVectors(chars, charW, charH);
@@ -220,7 +224,7 @@ function VideoAscii({
                 // scale sampling density with font size
                 const circleN = Math.max(1, Math.round(charW / 5));
                 gl.useProgram(pass1Program);
-                gl.uniform2f(resources.p1CellsizeLoc, charW, charH);
+                gl.uniform2f(resources.p1CellsizeLoc, cellW, cellH);
                 gl.uniform1i(resources.p1CircleNLoc, circleN);
                 gl.uniform1i(resources.p1NumCharsLoc, numChars);
                 gl.uniform1f(resources.p1ExponentLoc, 2.0);
@@ -243,7 +247,7 @@ function VideoAscii({
             gl.bindTexture(gl.TEXTURE_2D, atlasTextureRef.current);
             gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hiddenCanvas);
             gl.uniform1f(resources.numLoc, chars.length);
-            gl.uniform2f(resources.sizeLoc, charW, charH);
+            gl.uniform2f(resources.sizeLoc, cellW, cellH);
 
             rebuildScatterAtlas();
         };
@@ -271,6 +275,41 @@ function VideoAscii({
         // attach functions to refs -> can call outside of useEffect without rerender
         setupGridRef.current = setupGrid;
         rebuildScatterAtlasRef.current = rebuildScatterAtlas;
+
+        // size canvas to container display dimensions 
+        const setupCanvas = (containerW: number, containerH: number) => {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = Math.round(containerW * dpr);
+            canvas.height = Math.round(containerH * dpr);
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.uniform2f(resources.resLoc, canvas.width, canvas.height);
+            gl.useProgram(pass1Program);
+            gl.uniform2f(resources.p1ResLoc, canvas.width, canvas.height);
+            gl.useProgram(program);
+
+            // center-crop video to match display aspect resolution 
+            const videoAR = video.videoWidth / video.videoHeight;
+            const displayAR = containerW / containerH;
+            let scaleX = 1.0;
+            let scaleY = 1.0;
+            let offsetX = 0.0;
+            let offsetY = 0.0;
+            if (displayAR > videoAR) { // video is taller relative -> need to scale video up so that top and bot overflow
+                scaleY = videoAR / displayAR;
+                offsetY = (1.0 - scaleY) / 2.0;
+            } else { // video shorter -> scale video up so that left and right overflow
+                scaleX = displayAR / videoAR;
+                offsetX = (1.0 - scaleX) / 2.0;
+            }
+            gl.uniform2f(resources.cropOffsetLoc, offsetX, offsetY);
+            gl.uniform2f(resources.cropScaleLoc, scaleX, scaleY);
+            gl.useProgram(pass1Program);
+            gl.uniform2f(resources.p1CropOffsetLoc, offsetX, offsetY);
+            gl.uniform2f(resources.p1CropScaleLoc, scaleX, scaleY);
+            gl.useProgram(program);
+
+            setupGrid(numColsRef.current);
+        };
 
         const onMouseMove = (e: MouseEvent) => {
             if (!mouseEnabledRef.current) return;
@@ -337,15 +376,8 @@ function VideoAscii({
         };
 
         const onLoaded = () => {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            gl.viewport(0, 0, canvas.width, canvas.height);
-            gl.uniform2f(resources.resLoc, canvas.width, canvas.height);
-            gl.useProgram(pass1Program);
-            gl.uniform2f(resources.p1ResLoc, canvas.width, canvas.height);
-            gl.useProgram(program);
-
-            setupGrid(numColsRef.current);
+            const containerEl = containerRef.current!;
+            setupCanvas(containerEl.clientWidth || video.videoWidth, containerEl.clientHeight || video.videoHeight);
 
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, resources.texture);
@@ -364,17 +396,29 @@ function VideoAscii({
             video.addEventListener('canplay', () => video.play(), { once: true });
         };
 
+        // resize canvas when container is resized
+        const ro = new ResizeObserver(entries => {
+            const { width, height } = entries[0].contentRect;
+            if (loadedRef.current && width > 0 && height > 0) {
+                setupCanvas(width, height);
+            }
+        });
+        if (containerRef.current) {
+            ro.observe(containerRef.current);
+        }
+
         video.addEventListener("loadeddata", onLoaded, { once: true });
         if (isMultiSource) {
             video.addEventListener("ended", onEnded);
         }
         if (video.readyState >= 2 && video.currentSrc.endsWith(sources[0])) {
-            onLoaded(); 
+            onLoaded();
         } else if (!video.currentSrc.endsWith(sources[0])) {
             video.load(); // updates src in source -> need to trigger reload
         }
 
         return () => {
+            ro.disconnect();
             setupGridRef.current = null;
             rebuildScatterAtlasRef.current = null;
             loadedRef.current = false;
@@ -404,16 +448,12 @@ function VideoAscii({
         };
     }, [src, charMode, chars, revealEffectFlag, revealDuration, revealEnabled]);
 
-    const canvasStyle: React.CSSProperties = fit === 'height'
-        ? { height: '100%', width: 'auto', display: 'block' }
-        : { width: '100%', height: 'auto', display: 'block' };
-
     return (
-        <div className={className} style={{ height: '100%', width: '100%', overflow: 'hidden' }}>
+        <div ref={containerRef} className={className} style={{ height: '100%', width: '100%' }}>
             <video ref={videoRef} muted playsInline autoPlay loop={!Array.isArray(src) || src.length === 1} style={{ display: "none" }}>
                 <source src={Array.isArray(src) ? src[0] : src} type="video/mp4" />
             </video>
-            <canvas ref={canvasRef} style={canvasStyle} />
+            <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
         </div>
     );
 }

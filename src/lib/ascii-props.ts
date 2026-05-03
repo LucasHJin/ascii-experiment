@@ -39,7 +39,6 @@ export interface Props {
     mouseEffect?: boolean | MouseEffectOptions;
     clickEffect?: boolean | ClickEffectOptions;
     charMode?: 'shape' | 'luminance';
-    fit?: 'width' | 'height';
     className?: string;
 }
 
