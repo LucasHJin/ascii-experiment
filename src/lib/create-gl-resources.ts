@@ -18,15 +18,17 @@ export interface GLResources {
     fbo: WebGLFramebuffer;
     scatterAtlasTexture: WebGLTexture;
     scatterStateTexture: WebGLTexture;
+    spreadStateTexture: WebGLTexture;
     // pass1 uniform locations
     p1ResLoc: WebGLUniformLocation | null;
     p1CellsizeLoc: WebGLUniformLocation | null;
     p1CircleNLoc: WebGLUniformLocation | null;
     p1NumCharsLoc: WebGLUniformLocation | null;
     p1ExponentLoc: WebGLUniformLocation | null;
+    p1CropOffsetLoc: WebGLUniformLocation | null;
+    p1CropScaleLoc: WebGLUniformLocation | null;
     // pass2 uniform locations
     revealEffectFlagLoc: WebGLUniformLocation | null;
-    coloredFlagLoc: WebGLUniformLocation | null;
     mouseEffectFlagLoc: WebGLUniformLocation | null;
     clickEffectFlagLoc: WebGLUniformLocation | null;
     shapeMatchingLoc: WebGLUniformLocation | null;
@@ -43,11 +45,14 @@ export interface GLResources {
     rippleBrightnessesLoc: WebGLUniformLocation | null;
     scatterEffectFlagLoc: WebGLUniformLocation | null;
     scatterNumCharsLoc: WebGLUniformLocation | null;
+    spreadEffectFlagLoc: WebGLUniformLocation | null;
     videoModeLoc: WebGLUniformLocation | null;
     resLoc: WebGLUniformLocation | null;
     sizeLoc: WebGLUniformLocation | null;
     numLoc: WebGLUniformLocation | null;
     gridSizeLoc: WebGLUniformLocation | null;
+    cropOffsetLoc: WebGLUniformLocation | null;
+    cropScaleLoc: WebGLUniformLocation | null;
 }
 
 export function createGLResources(gl: WebGL2RenderingContext): GLResources | null {
@@ -115,11 +120,14 @@ export function createGLResources(gl: WebGL2RenderingContext): GLResources | nul
     gl.useProgram(pass1Program);
     gl.uniform1i(gl.getUniformLocation(pass1Program, "u_texture"), 0);
     gl.uniform1i(gl.getUniformLocation(pass1Program, "u_charVectors"), 2);
-    const p1ResLoc      = gl.getUniformLocation(pass1Program, "u_resolution");
+    const p1ResLoc = gl.getUniformLocation(pass1Program, "u_resolution");
     const p1CellsizeLoc = gl.getUniformLocation(pass1Program, "u_cellsize");
-    const p1CircleNLoc  = gl.getUniformLocation(pass1Program, "u_circleN");
+    const p1CircleNLoc = gl.getUniformLocation(pass1Program, "u_circleN");
     const p1NumCharsLoc = gl.getUniformLocation(pass1Program, "u_numCharsInt");
     const p1ExponentLoc = gl.getUniformLocation(pass1Program, "u_shapeExponent");
+    // for resizing
+    const p1CropOffsetLoc = gl.getUniformLocation(pass1Program, "u_cropOffset");
+    const p1CropScaleLoc = gl.getUniformLocation(pass1Program, "u_cropScale");
 
     // FBO texture (each byte stores one character index)
     const fboTexture = gl.createTexture()!;
@@ -149,15 +157,24 @@ export function createGLResources(gl: WebGL2RenderingContext): GLResources | nul
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
+    // spread state texture
+    const spreadStateTexture = gl.createTexture()!;
+    gl.activeTexture(gl.TEXTURE6);
+    gl.bindTexture(gl.TEXTURE_2D, spreadStateTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
     // pass2 uniform locations
     gl.useProgram(program);
     gl.uniform1i(gl.getUniformLocation(program, "u_fboTexture"), 3);
     gl.uniform1i(gl.getUniformLocation(program, "u_scatterAtlas"), 4);
     gl.uniform1i(gl.getUniformLocation(program, "u_scatterStateTexture"), 5);
+    gl.uniform1i(gl.getUniformLocation(program, "u_spreadStateTexture"), 6);
 
     // effects
     const revealEffectFlagLoc = gl.getUniformLocation(program, "u_revealEffectFlag");
-    const coloredFlagLoc = gl.getUniformLocation(program, "u_coloredFlag");
     const mouseEffectFlagLoc = gl.getUniformLocation(program, "u_mouseEffect");
     const clickEffectFlagLoc = gl.getUniformLocation(program, "u_clickEffect");
     const shapeMatchingLoc = gl.getUniformLocation(program, "u_shapeMatching");
@@ -174,24 +191,27 @@ export function createGLResources(gl: WebGL2RenderingContext): GLResources | nul
     const rippleBrightnessesLoc = gl.getUniformLocation(program, "u_rippleBrightnesses");
     const scatterEffectFlagLoc = gl.getUniformLocation(program, "u_scatterEffect");
     const scatterNumCharsLoc = gl.getUniformLocation(program, "u_scatterNumChars");
+    const spreadEffectFlagLoc = gl.getUniformLocation(program, "u_spreadEffect");
     const videoModeLoc = gl.getUniformLocation(program, "u_videoMode");
     const resLoc = gl.getUniformLocation(program, "u_resolution");
     const sizeLoc = gl.getUniformLocation(program, "u_cellsize");
     const numLoc = gl.getUniformLocation(program, "u_numChars");
     const gridSizeLoc = gl.getUniformLocation(program, "u_gridSize");
+    const cropOffsetLoc = gl.getUniformLocation(program, "u_cropOffset");
+    const cropScaleLoc = gl.getUniformLocation(program, "u_cropScale");
 
     return {
         program, pass1Program,
         buffer,
         vertShader, fragShader, pass1FragShader,
         texture, atlasTexture, charVectorsTexture, fboTexture, fbo,
-        scatterAtlasTexture, scatterStateTexture,
-        p1ResLoc, p1CellsizeLoc, p1CircleNLoc, p1NumCharsLoc, p1ExponentLoc,
-        revealEffectFlagLoc, coloredFlagLoc, mouseEffectFlagLoc, clickEffectFlagLoc,
+        scatterAtlasTexture, scatterStateTexture, spreadStateTexture,
+        p1ResLoc, p1CellsizeLoc, p1CircleNLoc, p1NumCharsLoc, p1ExponentLoc, p1CropOffsetLoc, p1CropScaleLoc,
+        revealEffectFlagLoc, mouseEffectFlagLoc, clickEffectFlagLoc,
         shapeMatchingLoc, revealProgressLoc, brightnessLoc, saturationLoc, bgOpacityLoc,
         mouseBrightnessLoc, mousePositionsLoc, mouseLifeFracsLoc, mouseRadiusLoc,
         ripplePositionsLoc, rippleRadiiLoc, rippleBrightnessesLoc,
-        scatterEffectFlagLoc, scatterNumCharsLoc, videoModeLoc,
-        resLoc, sizeLoc, numLoc, gridSizeLoc,
+        scatterEffectFlagLoc, scatterNumCharsLoc, spreadEffectFlagLoc, videoModeLoc,
+        resLoc, sizeLoc, numLoc, gridSizeLoc, cropOffsetLoc, cropScaleLoc,
     };
 }

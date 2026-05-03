@@ -5,7 +5,6 @@ precision highp usampler2D;
 
 // flags
 uniform int u_revealEffectFlag;
-uniform bool u_coloredFlag;
 uniform bool u_videoMode;
 
 // effects
@@ -32,6 +31,9 @@ uniform usampler2D u_scatterStateTexture; // gridCols x gridRows, R8UI: 0=inacti
 uniform sampler2D u_scatterAtlas;          // wide atlas of u_scatterNumChars glyphs
 uniform float u_scatterNumChars;
 
+uniform bool u_spreadEffect;
+uniform usampler2D u_spreadStateTexture;
+
 uniform bool u_shapeMatching;
 
 uniform sampler2D u_texture;
@@ -41,6 +43,8 @@ uniform vec2 u_resolution;
 uniform vec2 u_cellsize;
 uniform float u_numChars;
 uniform vec2 u_gridSize;
+uniform vec2 u_cropOffset;
+uniform vec2 u_cropScale;
 
 out vec4 fragColor;
 
@@ -49,6 +53,28 @@ float hash(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * 0.1031); // mix up axes to avoid symmetry
     p3 += dot(p3, p3.yzx + 33.33); // nonlienar mixing + avoid smaller number collapse
     return fract((p3.x + p3.y) * p3.z); // final fract to be between 0 and 1
+}
+
+vec3 rgb2hsl(vec3 c) {
+    float maxC = max(c.r, max(c.g, c.b));
+    float minC = min(c.r, min(c.g, c.b));
+    float l = (maxC + minC) * 0.5;
+    float d = maxC - minC;
+    float h = 0.0, s = 0.0;
+    if (d > 0.0) {
+        s = d / (1.0 - abs(2.0 * l - 1.0));
+        if (maxC == c.r) h = mod((c.g - c.b) / d, 6.0) / 6.0;
+        else if (maxC == c.g) h = ((c.b - c.r) / d + 2.0) / 6.0;
+        else h = ((c.r - c.g) / d + 4.0) / 6.0;
+    }
+    return vec3(h, s, l);
+}
+
+vec3 hsl2rgb(vec3 c) {
+    float h = c.x, s = c.y, l = c.z;
+    float a = s * (1.0 - abs(2.0 * l - 1.0));
+    vec3 rgb = clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+    return l + a * (rgb - 0.5);
 }
 
 void main() {
@@ -78,17 +104,16 @@ void main() {
     }
 
     vec2 cellCenter = (cellCoord + 0.5) * u_cellsize; // figure out center pixel of cell
-    // sample per pixel vs per cell center (video vs ascii)
-    vec2 sampleUV = u_videoMode ? (fragCoord / u_resolution) : (cellCenter / u_resolution);
+    // sample per pixel vs per cell center (video vs ascii), then remap into cropped video region
+    vec2 rawUV = u_videoMode ? (fragCoord / u_resolution) : (cellCenter / u_resolution);
+    vec2 sampleUV = u_cropOffset + rawUV * u_cropScale;
 
     vec3 cellColor = texture(u_texture, sampleUV).rgb;
     float luminosity = dot(cellColor, vec3(0.299, 0.587, 0.114)); // luminance of pixel
-    if (u_coloredFlag) {
-        cellColor = clamp(mix(vec3(luminosity), cellColor, u_saturation), 0.0, 1.0); // increase saturation (clamped)
-    } else {
-        cellColor = vec3(luminosity);
-    }
-    cellColor = pow(cellColor, vec3(2.0 - u_brightness)); // boost brightness
+    vec3 hsl = rgb2hsl(cellColor);
+    hsl.z = clamp(hsl.z * u_brightness, 0.0, 1.0);
+    hsl.y = clamp(hsl.y * u_saturation, 0.0, 1.0);
+    cellColor = hsl2rgb(hsl);
 
     vec2 withinCellPos = fract(fragCoord / u_cellsize);
 
@@ -117,6 +142,18 @@ void main() {
             float su = (float(idx) + withinCellPos.x) / u_scatterNumChars;
             float mask = texture(u_scatterAtlas, vec2(su, withinCellPos.y)).r;
             // video mode -> scatter chars composites over video pixel 
+            vec3 scatterBg = u_videoMode ? cellColor : bgColor;
+            scatterColor = mix(scatterBg, vec3(1.0), mask);
+            scatterHit = true;
+        }
+    }
+    
+    if (!scatterHit && u_spreadEffect) { // scatter takes priority
+        uint state = texelFetch(u_spreadStateTexture, ivec2(cellCoord), 0).r;
+        if (state > 0u) {
+            int idx = int(state) - 1;
+            float su = (float(idx) + withinCellPos.x) / u_scatterNumChars;
+            float mask = texture(u_scatterAtlas, vec2(su, withinCellPos.y)).r;
             vec3 scatterBg = u_videoMode ? cellColor : bgColor;
             scatterColor = mix(scatterBg, vec3(1.0), mask);
             scatterHit = true;

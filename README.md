@@ -1,73 +1,126 @@
-# React + TypeScript + Vite
+# react-video-ascii
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React component optimized for rendering videos as ASCII using WebGL2. 
 
-Currently, two official plugins are available:
+<p align="center">
+  <img width="1512" height="949" alt="demo" src="https://github.com/user-attachments/assets/2b41b0af-e864-430d-ade5-0249335d1aac" />
+</p> 
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+[Try it out!](https://video-ascii-demo.vercel.app/)
 
-## React Compiler
+## Installation
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install react-video-ascii
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Usage
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```tsx
+import { VideoAscii } from 'react-video-ascii';
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+// Basic usage
+<VideoAscii src="/video.mp4" />
+
+// Multiple videos (loop sequentially)
+const sources = ['/video1.mp4', '/video2.mp4'];
+<VideoAscii src={sources} />
+
+// With options
+<VideoAscii
+  src="/video.mp4"
+  videoMode={false}
+  numColsRaw={150}
+  brightnessRaw={1.2}
+  saturationRaw={1.0}
+  bgOpacityRaw={0.3}
+  chars=" `.',-_:!abcdef"
+  charMode="shape"
+  mouseEffect={{
+    style: 'brighten',
+    radius: 0.08,
+    duration: 1.0,
+    trailLen: 15,
+    trailDecay: 10,
+    brightness: 2.0,
+  }}
+  clickEffect={{
+    style: 'ripple',
+    brightness: 1.1,
+    speed: 2,
+  }}
+  revealEffect={{
+    type: 'random',
+    duration: 0.4,
+  }}
+  className="my-ascii"
+/>
 ```
+
+> **Note 1:** When passing an array to `src`, define it outside the component or in a `useMemo`/`useRef` (an inline array literal creates a new reference on every render and will cause the video to reload).
+
+> **Note 2:** The component fills its parent container. Control size via the parent element or the `className` prop.
+
+## Props
+
+| Prop | Type | Default | Range | Description |
+|------|------|---------|-------|-------------|
+| `src` | `string \| string[]` | — | — | Video source URL(s). Multiple URLs play sequentially. |
+| `videoMode` | `boolean` | `false` | — | Show original video colors instead of ASCII. |
+| `numColsRaw` | `number` | `250` | `20–350` | Number of character columns. |
+| `brightnessRaw` | `number` | `1.0` | `0.0–2.0` | Brightness multiplier. |
+| `saturationRaw` | `number` | `1.0` | `0.0–2.0` | Saturation multiplier. |
+| `bgOpacityRaw` | `number` | `0.3` | `0.0–1.0` | Background opacity. |
+| `chars` | `string` | *(standard)* | — | Character set, ordered dark to bright. |
+| `charMode` | `'shape' \| 'luminance'` | `'shape'` | — | `shape` matches glyph silhouettes; `luminance` uses brightness. |
+| `mouseEffect` | `boolean \| MouseEffectOptions` | `true` | — | Mouse hover effects. `true` uses defaults. |
+| `clickEffect` | `boolean \| ClickEffectOptions` | `true` | — | Click effects. `true` uses defaults. |
+| `revealEffect` | `boolean \| RevealEffectOptions` | `false` | — | Reveal animation on load. `true` uses defaults. |
+| `className` | `string` | — | — | CSS class on the outer container. |
+
+---
+
+### `MouseEffectOptions`
+
+Passed to `mouseEffect`. All fields optional.
+
+| Field | Type | Default | Range | Description |
+|-------|------|---------|-------|-------------|
+| `style` | `'brighten' \| 'scatter'` | `'brighten'` | — | `brighten` highlights chars; `scatter` replaces them. |
+| `radius` | `number` | `0.08` / `0.05` | `0.03–0.2` | Effect radius as a fraction of the smaller canvas dimension. |
+| `duration` | `number` | `1.0` | `0.1–4` | Seconds the effect lingers after the cursor leaves. |
+| `trailLen` | `number` | `15` | `0–30` | *(brighten)* Trail positions tracked. |
+| `trailDecay` | `number` | `10` | `1–15` | *(brighten)* How fast older trail positions fade. |
+| `brightness` | `number` | `2.0` | `0.2–5.0` | *(brighten)* Brightness boost at the cursor. |
+| `scatterChars` | `string` | `'->o'` | — | *(scatter)* Chars substituted near the cursor. |
+
+---
+
+### `ClickEffectOptions`
+
+Passed to `clickEffect`. All fields optional.
+
+| Field | Type | Default | Range | Description |
+|-------|------|---------|-------|-------------|
+| `style` | `'ripple' \| 'spread'` | `'ripple'` | — | `ripple` sends a brightness ring outward; `spread` expands a scatter region. |
+| `brightness` | `number` | `1.1` | `1.05–2.0` | *(ripple)* Brightness of the ripple ring. |
+| `speed` | `number` | `2` | `0.5–4.0` | *(ripple)* Ripple expansion speed. |
+| `spreadExpandDuration` | `number` | `1.5` | `0.5–5.0` | *(spread)* Seconds for the region to fully expand. |
+| `spreadSpeed` | `number` | `7.5` | `0.5–10.0` | *(spread)* Speed of the spread wave front. |
+
+---
+
+### `RevealEffectOptions`
+
+Passed to `revealEffect`. All fields optional.
+
+| Field | Type | Default | Range | Description |
+|-------|------|---------|-------|-------------|
+| `type` | `'diagonal' \| 'radial' \| 'random'` | `'random'` | — | Pattern in which characters appear on load. |
+| `duration` | `number` | `0.4` | `0.1–4` | Reveal animation duration in seconds. |
+
+---
+
+### `chars`
+
+The default `chars` set is: `` `.',-_:!;|\"~+^lr[](\\/L)>t<v=Tz?icf1{sIxY*jJno}CZyVwmSXRqM$O%#9&NW0Q@``.

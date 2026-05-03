@@ -66,6 +66,16 @@ export function createScatterEffect({
             smoothVy = 0;
         },
 
+        reset(gl: WebGL2RenderingContext) {
+            // rebuild the state texture (index values) and reset cellChar indices
+            cellChar.fill(0);
+            if (_scatterStateTexture && gridCols > 0) {
+                gl.activeTexture(gl.TEXTURE5);
+                gl.bindTexture(gl.TEXTURE_2D, _scatterStateTexture);
+                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gridCols, gridRows, gl.RED_INTEGER, gl.UNSIGNED_BYTE, cellChar);
+            }
+        },
+
         tick(gl: WebGL2RenderingContext, canvas: HTMLCanvasElement) {
             if (!scatterEnabledRef.current || gridCols === 0 || gridRows === 0) return;
             const now = performance.now();
