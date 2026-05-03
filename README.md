@@ -1,9 +1,8 @@
 # react-video-ascii
 
 React component optimized for rendering videos as ASCII using WebGL2. 
+
 [Try it out!](https://video-ascii-demo.vercel.app/)
-
-
 
 ## Installation
 
@@ -60,20 +59,20 @@ const sources = ['/video1.mp4', '/video2.mp4'];
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `src` | `string \| string[]` | — | Video source URL(s). Multiple URLs play sequentially. |
-| `videoMode` | `boolean` | `false` | Renders the original video colors instead of ASCII. |
-| `numColsRaw` | `number` | `250` | Number of character columns. Clamped to `20–350`. |
-| `brightnessRaw` | `number` | `1.0` | Overall brightness multiplier. Clamped to `0.0–2.0`. |
-| `saturationRaw` | `number` | `1.0` | Color saturation multiplier. Clamped to `0.0–2.0`. |
-| `bgOpacityRaw` | `number` | `0.3` | Background (black cell) opacity. Clamped to `0.0–1.0`. |
-| `chars` | `string` | *(built-in set)* | Characters used for rendering, ordered dark to bright. |
-| `charMode` | `'shape' \| 'luminance'` | `'shape'` | How characters are matched to pixels. `shape` uses glyph silhouettes; `luminance` uses brightness. |
-| `mouseEffect` | `boolean \| MouseEffectOptions` | `true` | Enables a mouse hover effect. `true` uses defaults. |
-| `clickEffect` | `boolean \| ClickEffectOptions` | `true` | Enables a click effect. `true` uses defaults. |
-| `revealEffect` | `boolean \| RevealEffectOptions` | `false` | Plays a reveal animation on load. `true` uses defaults. |
-| `className` | `string` | — | CSS class applied to the outer container div. |
+| Prop | Type | Default | Range | Description |
+|------|------|---------|-------|-------------|
+| `src` | `string \| string[]` | — | — | Video source URL(s). Multiple URLs play sequentially. |
+| `videoMode` | `boolean` | `false` | — | Show original video colors instead of ASCII. |
+| `numColsRaw` | `number` | `250` | `20–350` | Number of character columns. |
+| `brightnessRaw` | `number` | `1.0` | `0.0–2.0` | Brightness multiplier. |
+| `saturationRaw` | `number` | `1.0` | `0.0–2.0` | Saturation multiplier. |
+| `bgOpacityRaw` | `number` | `0.3` | `0.0–1.0` | Background opacity. |
+| `chars` | `string` | *(standard)* | — | Character set, ordered dark to bright. |
+| `charMode` | `'shape' \| 'luminance'` | `'shape'` | — | `shape` matches glyph silhouettes; `luminance` uses brightness. |
+| `mouseEffect` | `boolean \| MouseEffectOptions` | `true` | — | Mouse hover effects. `true` uses defaults. |
+| `clickEffect` | `boolean \| ClickEffectOptions` | `true` | — | Click effects. `true` uses defaults. |
+| `revealEffect` | `boolean \| RevealEffectOptions` | `false` | — | Reveal animation on load. `true` uses defaults. |
+| `className` | `string` | — | — | CSS class on the outer container. |
 
 ---
 
@@ -81,15 +80,15 @@ const sources = ['/video1.mp4', '/video2.mp4'];
 
 Passed to `mouseEffect`. All fields optional.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `style` | `'brighten' \| 'scatter'` | `'brighten'` | Effect style. `brighten` highlights characters under the cursor; `scatter` replaces them with custom chars. |
-| `radius` | `number` | `0.08` / `0.05` | Effect radius as a fraction of the smaller canvas dimension. Clamped to `0.03–0.2`. Default is `0.05` for scatter, `0.08` for brighten. |
-| `duration` | `number` | `1.0` | How long (in seconds) the effect lingers after the cursor moves away. Clamped to `0.1–4`. |
-| `trailLen` | `number` | `15` | *(brighten only)* Number of trail positions tracked. Clamped to `0–30`. |
-| `trailDecay` | `number` | `10` | *(brighten only)* How quickly older trail positions fade. Clamped to `1–15`. |
-| `brightness` | `number` | `2.0` | *(brighten only)* Brightness boost at the cursor. Clamped to `0.2–5.0`. |
-| `scatterChars` | `string` | `'->o'` | *(scatter only)* Characters randomly substituted near the cursor. |
+| Field | Type | Default | Range | Description |
+|-------|------|---------|-------|-------------|
+| `style` | `'brighten' \| 'scatter'` | `'brighten'` | — | `brighten` highlights chars; `scatter` replaces them. |
+| `radius` | `number` | `0.08` / `0.05` | `0.03–0.2` | Effect radius as a fraction of the smaller canvas dimension. |
+| `duration` | `number` | `1.0` | `0.1–4` | Seconds the effect lingers after the cursor leaves. |
+| `trailLen` | `number` | `15` | `0–30` | *(brighten)* Trail positions tracked. |
+| `trailDecay` | `number` | `10` | `1–15` | *(brighten)* How fast older trail positions fade. |
+| `brightness` | `number` | `2.0` | `0.2–5.0` | *(brighten)* Brightness boost at the cursor. |
+| `scatterChars` | `string` | `'->o'` | — | *(scatter)* Chars substituted near the cursor. |
 
 ---
 
@@ -97,13 +96,13 @@ Passed to `mouseEffect`. All fields optional.
 
 Passed to `clickEffect`. All fields optional.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `style` | `'ripple' \| 'spread'` | `'ripple'` | Effect style. `ripple` sends a brightness ring outward; `spread` expands a region of scatter chars from the click point. |
-| `brightness` | `number` | `1.1` | *(ripple only)* Brightness of the ripple ring. Clamped to `1.05–2.0`. |
-| `speed` | `number` | `2` | *(ripple only)* Speed of the ripple expansion. Clamped to `0.5–4.0`. |
-| `spreadExpandDuration` | `number` | `1.5` | *(spread only)* Seconds the spread region takes to fully expand. Clamped to `0.5–5.0`. |
-| `spreadSpeed` | `number` | `7.5` | *(spread only)* Speed of the spread wave front. Clamped to `0.5–10.0`. |
+| Field | Type | Default | Range | Description |
+|-------|------|---------|-------|-------------|
+| `style` | `'ripple' \| 'spread'` | `'ripple'` | — | `ripple` sends a brightness ring outward; `spread` expands a scatter region. |
+| `brightness` | `number` | `1.1` | `1.05–2.0` | *(ripple)* Brightness of the ripple ring. |
+| `speed` | `number` | `2` | `0.5–4.0` | *(ripple)* Ripple expansion speed. |
+| `spreadExpandDuration` | `number` | `1.5` | `0.5–5.0` | *(spread)* Seconds for the region to fully expand. |
+| `spreadSpeed` | `number` | `7.5` | `0.5–10.0` | *(spread)* Speed of the spread wave front. |
 
 ---
 
@@ -111,7 +110,7 @@ Passed to `clickEffect`. All fields optional.
 
 Passed to `revealEffect`. All fields optional.
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `type` | `'diagonal' \| 'radial' \| 'random'` | `'random'` | Pattern in which characters appear on load. |
-| `duration` | `number` | `0.4` | Duration of the reveal animation in seconds. Clamped to `0.1–4`. |
+| Field | Type | Default | Range | Description |
+|-------|------|---------|-------|-------------|
+| `type` | `'diagonal' \| 'radial' \| 'random'` | `'random'` | — | Pattern in which characters appear on load. |
+| `duration` | `number` | `0.4` | `0.1–4` | Reveal animation duration in seconds. |
