@@ -2,6 +2,10 @@
 
 React component optimized for rendering videos as ASCII using WebGL2. 
 
+<p align="center">
+  <img width="1512" height="949" alt="demo" src="https://github.com/user-attachments/assets/2b41b0af-e864-430d-ade5-0249335d1aac" />
+</p> 
+
 [Try it out!](https://video-ascii-demo.vercel.app/)
 
 ## Installation
