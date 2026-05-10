@@ -21,6 +21,7 @@ function VideoAscii({
         clickEffect = true,
         charMode = 'shape',
         className,
+        cropFocus = 'center',
     }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -58,6 +59,9 @@ function VideoAscii({
     const spreadSpeedRef = useRef(spreadSpeed);
     const numColsRef = useRef(numCols);
     const videoModeRef = useRef(videoMode);
+    const cropFocusRef = useRef<'left' | 'center' | 'right'>(cropFocus);
+    const containerWRef = useRef(0);
+    const containerHRef = useRef(0);
     // update refs inside useEffect (not in render) -> avoids unintentional errors
     useEffect(() => {
         brightnessRef.current = brightness;
@@ -113,6 +117,7 @@ function VideoAscii({
 
     const setupGridRef = useRef<((nc: number) => void) | null>(null);
     const rebuildScatterAtlasRef = useRef<(() => void) | null>(null);
+    const setupCanvasRef = useRef<((cw: number, ch: number) => void) | null>(null);
     const loadedRef = useRef(false);
 
     // numCols change -> refresh atlas/grid textures without full GL reinit
@@ -121,6 +126,14 @@ function VideoAscii({
             setupGridRef.current?.(numCols);
         }
     }, [numCols]);
+
+    // cropFocus change -> recompute crop uniforms without full GL reinit
+    useEffect(() => {
+        cropFocusRef.current = cropFocus;
+        if (loadedRef.current && containerWRef.current > 0) {
+            setupCanvasRef.current?.(containerWRef.current, containerHRef.current);
+        }
+    }, [cropFocus]);
 
     useEffect(() => {
         loadedRef.current = false;
@@ -292,23 +305,29 @@ function VideoAscii({
         const setupCanvas = (cw: number, ch: number) => {
             containerW = Math.round(cw);
             containerH = Math.round(ch);
+            containerWRef.current = containerW;
+            containerHRef.current = containerH;
             canvas.width = containerW;
             canvas.height = containerH;
             setupGrid(numColsRef.current);
 
-            // center-crop video to match snapped canvas AR (avoids slight AR error from container dimensions)
+            // crop video to match snapped canvas AR (avoids slight AR error from container dimensions)
             const videoAR = video.videoWidth / video.videoHeight;
             const displayAR = canvas.width / canvas.height;
             let scaleX = 1.0;
             let scaleY = 1.0;
             let offsetX = 0.0;
             let offsetY = 0.0;
-            if (displayAR > videoAR) { // video is taller relative -> need to scale video up so that top and bot overflow
+            if (displayAR > videoAR) { // video is taller relative -> crop top/bottom, full width shown
                 scaleY = videoAR / displayAR;
                 offsetY = (1.0 - scaleY) / 2.0;
-            } else { // video shorter -> scale video up so that left and right overflow
+            } else { // video shorter -> crop left/right based on cropFocus
                 scaleX = displayAR / videoAR;
-                offsetX = (1.0 - scaleX) / 2.0;
+                const focus = cropFocusRef.current;
+                // can crop to left, center, right
+                const focusCenter = focus === 'left' ? 0.25 : focus === 'right' ? 0.75 : 0.5;
+                // if scaleX/2 > 0.25, then it clamps from 0 to scaleX
+                offsetX = Math.max(0, Math.min(1 - scaleX, focusCenter - scaleX / 2));
             }
             gl.uniform2f(resources.cropOffsetLoc, offsetX, offsetY);
             gl.uniform2f(resources.cropScaleLoc, scaleX, scaleY);
@@ -317,6 +336,7 @@ function VideoAscii({
             gl.uniform2f(resources.p1CropScaleLoc, scaleX, scaleY);
             gl.useProgram(program);
         };
+        setupCanvasRef.current = setupCanvas;
 
         const onMouseMove = (e: MouseEvent) => {
             if (!mouseEnabledRef.current) return;
@@ -428,6 +448,7 @@ function VideoAscii({
             ro.disconnect();
             setupGridRef.current = null;
             rebuildScatterAtlasRef.current = null;
+            setupCanvasRef.current = null;
             loadedRef.current = false;
             cancelAnimationFrame(animFrameId);
             video.removeEventListener("loadeddata", onLoaded);

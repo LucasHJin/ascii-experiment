@@ -40,6 +40,7 @@ export interface Props {
     clickEffect?: boolean | ClickEffectOptions;
     charMode?: 'shape' | 'luminance';
     className?: string;
+    cropFocus?: 'left' | 'center' | 'right';
 }
 
 export interface ParsedProps {
