@@ -76,6 +76,7 @@ const sources = ['/video1.mp4', '/video2.mp4'];
 | `mouseEffect` | `boolean \| MouseEffectOptions` | `true` | — | Mouse hover effects. `true` uses defaults. |
 | `clickEffect` | `boolean \| ClickEffectOptions` | `true` | — | Click effects. `true` uses defaults. |
 | `revealEffect` | `boolean \| RevealEffectOptions` | `false` | — | Reveal animation on load. `true` uses defaults. |
+| `cropFocus` | `'left' \| 'center' \| 'right'` | `'center'` | — | Determines where to anchor the cropping around. |
 | `className` | `string` | — | — | CSS class on the outer container. |
 
 ---
